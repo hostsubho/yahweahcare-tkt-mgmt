@@ -1,5 +1,5 @@
 // ============================================================
-// Vercel serverless function â wraps the Express app
+// Vercel serverless function — wraps the Express app
 // ============================================================
 //
 // Vercel routes every request matching the rewrite rule in vercel.json
@@ -29,6 +29,7 @@ import notificationRoutes  from '../src/modules/notifications/notifications.rout
 import pushRoutes          from '../src/modules/notifications/push.routes';
 import lookupRoutes        from '../src/modules/lookup/lookup.routes';
 import orgRoutes           from '../src/modules/org/org.routes';
+import vehicleRoutes       from '../src/modules/vehicles/vehicles.routes';
 import { pool }            from '../src/db/pool';
 import { sendEmail, buildSlaBreachHtml, type SlaBreachTicket } from '../src/modules/notifications/email.service';
 import { ensureEmailTables } from '../src/services/email/email.migrate';
@@ -38,7 +39,7 @@ import { sendOverdueReminders, sendDueTomorrowReminders } from '../src/services/
 import emailAdminRoutes      from '../src/modules/email/email.routes';
 import { sendCronNotification, ensurePushTable } from '../src/modules/notifications/notifications.service';
 
-// ââ Crash safety net ââââââââââââââââââââââââââââââââââââââââ
+// ── Crash safety net ────────────────────────────────────────
 // In serverless, an uncaught exception or unhandled promise rejection
 // anywhere (including inside third-party libs like @azure/msal-node,
 // which does some fire-and-forget background work) terminates the whole
@@ -47,10 +48,10 @@ import { sendCronNotification, ensurePushTable } from '../src/modules/notificati
 // Log loudly instead of letting the process die, so at minimum the
 // request that's already in flight can still complete/respond.
 process.on('unhandledRejection', (reason) => {
-  console.error('[fatal] unhandledRejection â would have crashed the function:', reason);
+  console.error('[fatal] unhandledRejection — would have crashed the function:', reason);
 });
 process.on('uncaughtException', (err) => {
-  console.error('[fatal] uncaughtException â would have crashed the function:', err);
+  console.error('[fatal] uncaughtException — would have crashed the function:', err);
 });
 
 // Ensure email tables exist on first cold start (idempotent)
@@ -59,12 +60,7 @@ ensureEmailTables().catch((e) => console.error('[startup] ensureEmailTables:', e
 // Ensure the activity log archive table exists on first cold start (idempotent)
 ensureArchiveTable().catch((e) => console.error('[startup] ensureArchiveTable:', e));
 
-// Ensure users.role column exists (schema patch â safe to run repeatedly)
-// Ensure users.is_active column exists (code expects is_active; schema has active)
-pool.query(`ALTER TABLE yc_tkt_mgmt.users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`)
-  .then(() => pool.query(`UPDATE yc_tkt_mgmt.users SET is_active = active WHERE is_active IS NULL`))
-  .catch((e) => console.error('[startup] ensure users.is_active column:', e));
-
+// Ensure users.role column exists (schema patch — safe to run repeatedly)
 pool.query(`ALTER TABLE yc_tkt_mgmt.users ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'staff'`)
   .then(() =>
     // Bootstrap admins get super_admin role if not already set
@@ -95,7 +91,7 @@ app.use(cors({
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser(env.SESSION_SECRET));
 
-// Health probe â bypass rate limit
+// Health probe — bypass rate limit
 app.get('/health', async (_req, res) => {
   const { pool } = await import('../src/db/pool');
   try {
@@ -126,10 +122,12 @@ app.use('/notifications', notificationRoutes);
 app.use('/push',          pushRoutes);
 app.use('/lookup',        lookupRoutes);
 app.use('/org',           orgRoutes);
+app.use('/vehicles',      apiLimiter);
+app.use('/vehicles',      vehicleRoutes);
 app.use('/email',         apiLimiter);
 app.use('/email',         emailAdminRoutes);
 
-// ââ SLA breach cron â called by Vercel Cron daily âââââââââ
+// ── SLA breach cron — called by Vercel Cron daily ─────────
 // Secured by CRON_SECRET header to prevent public access.
 app.post('/cron/sla-check', async (req, res) => {
   // Verify cron secret
@@ -187,7 +185,7 @@ app.post('/cron/sla-check', async (req, res) => {
       const html = buildSlaBreachHtml(tickets);
       await sendEmail(
         alertEmails,
-        `â ï¸ SLA Breach Alert â ${tickets.length} ticket${tickets.length !== 1 ? 's' : ''} overdue`,
+        `⚠️ SLA Breach Alert — ${tickets.length} ticket${tickets.length !== 1 ? 's' : ''} overdue`,
         html,
       );
     }
@@ -211,7 +209,7 @@ app.post('/cron/sla-check', async (req, res) => {
   }
 });
 
-// ââ Email queue retry cron â every 5 minutes ââââââââââââââ
+// ── Email queue retry cron — every 5 minutes ──────────────
 app.post('/cron/email-retry', async (req, res) => {
   const secret   = env.CRON_SECRET;
   const provided = req.headers['x-cron-secret'] || req.headers['authorization']?.replace('Bearer ', '');
@@ -225,7 +223,7 @@ app.post('/cron/email-retry', async (req, res) => {
   }
 });
 
-// ââ Due-tomorrow reminders â daily 7am ââââââââââââââââââââ
+// ── Due-tomorrow reminders — daily 7am ────────────────────
 app.post('/cron/due-tomorrow', async (req, res) => {
   const secret   = env.CRON_SECRET;
   const provided = req.headers['x-cron-secret'] || req.headers['authorization']?.replace('Bearer ', '');
@@ -239,7 +237,7 @@ app.post('/cron/due-tomorrow', async (req, res) => {
   }
 });
 
-// ââ Enhanced SLA overdue cron (replaces old standalone send) ââ
+// ── Enhanced SLA overdue cron (replaces old standalone send) ──
 // The existing /cron/sla-check still runs the admin digest;
 // this new endpoint sends per-assignee overdue reminders via queue.
 app.post('/cron/overdue-reminders', async (req, res) => {
@@ -255,7 +253,7 @@ app.post('/cron/overdue-reminders', async (req, res) => {
   }
 });
 
-// ââ Approval reminder cron â notifies approvers on tickets pending >24h âââââââ
+// ── Approval reminder cron — notifies approvers on tickets pending >24h ───────
 app.post('/cron/approval-reminders', async (req, res) => {
   const secret   = env.CRON_SECRET;
   const provided = req.headers['x-cron-secret'] || req.headers['authorization']?.replace('Bearer ', '');
@@ -289,7 +287,7 @@ app.post('/cron/approval-reminders', async (req, res) => {
   }
 });
 
-// ââ Daily approvals summary cron â per-approver pending count âââââââââââââââââ
+// ── Daily approvals summary cron — per-approver pending count ─────────────────
 app.post('/cron/daily-approvals-summary', async (req, res) => {
   const secret   = env.CRON_SECRET;
   const provided = req.headers['x-cron-secret'] || req.headers['authorization']?.replace('Bearer ', '');
@@ -341,7 +339,7 @@ app.post('/cron/daily-approvals-summary', async (req, res) => {
 app.use(notFound);
 app.use(errorHandler);
 
-// Vercel serverless handler â adapts Express to Vercel's request/response interface
+// Vercel serverless handler — adapts Express to Vercel's request/response interface
 export default function handler(req: VercelRequest, res: VercelResponse) {
   return app(req as unknown as express.Request, res as unknown as express.Response);
 }
