@@ -113,8 +113,17 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
+// Allow both the primary frontend and the YPC webapp frontend
+const ALLOWED_ORIGINS = new Set([
+  env.FRONTEND_URL,
+  'https://ypc-tms-webapp.vercel.app',
+  'https://ypc-tms.vercel.app',
+]);
 app.use(cors({
-  origin: env.FRONTEND_URL,
+  origin: (origin, cb) => {
+    if (!origin || ALLOWED_ORIGINS.has(origin)) return cb(null, true);
+    cb(new Error('Not allowed by CORS'));
+  },
   credentials: true,
   methods: ['GET','POST','PATCH','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
@@ -156,6 +165,17 @@ app.use('/lookup',        lookupRoutes);
 app.use('/org',           orgRoutes);
 app.use('/vehicles',      apiLimiter);
 app.use('/vehicles',      vehicleRoutes);
+
+// ── /yc/* prefix aliases — for ypc-tms-webapp compatibility ──────────────
+// ypc-tms-webapp calls /yc/<route> for Yahweh Care portal requests;
+// this backend serves those same routes at the root level, so we alias them.
+app.use('/yc/auth',       apiLimiter); app.use('/yc/auth',       authRoutes);
+app.use('/yc/tickets',    apiLimiter); app.use('/yc/tickets',    ticketRoutes);
+app.use('/yc/users',      apiLimiter); app.use('/yc/users',      userRoutes);
+app.use('/yc/org',        apiLimiter); app.use('/yc/org',        orgRoutes);
+app.use('/yc/vehicles',   apiLimiter); app.use('/yc/vehicles',   vehicleRoutes);
+app.use('/yc/lookup',     apiLimiter); app.use('/yc/lookup',     lookupRoutes);
+
 app.use('/email',         apiLimiter);
 app.use('/email',         emailAdminRoutes);
 
