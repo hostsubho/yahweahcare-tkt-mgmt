@@ -9364,8 +9364,8 @@
                 setLoading(true);
                 try {
                     const [vR, sR] = await Promise.all([
-                        fetch(`${getPortalApi()}/vehicles`, { credentials:'include', headers: authHeaders() }),
-                        fetch(`${getPortalApi()}/users?limit=200&status=active`, { credentials:'include', headers: authHeaders() }),
+                        fetch(`${HRMS_API}/vehicles`, { credentials:'include', headers: authHeaders() }),
+                        fetch(`${HRMS_API}/users?limit=200&status=active`, { credentials:'include', headers: authHeaders() }),
                     ]);
                     const [vd, sd] = await Promise.all([vR.json(), sR.json()]);
                     if (!vR.ok) throw new Error(vd.message || vd.error || 'Failed to load vehicles');
@@ -9377,7 +9377,7 @@
 
             const fetchAlertConfigs = React.useCallback(async () => {
                 try {
-                    const res = await authFetch(`${getPortalApi()}/vehicles/alert-settings`);
+                    const res = await authFetch(`${HRMS_API}/vehicles/alert-settings`);
                     if (res.ok) { const d = await res.json(); setAlertConfigs(d.configs || []); }
                 } catch(e) {}
             }, []);
@@ -9444,7 +9444,7 @@
                         next_service_due: form.next_service_due || null,
                         notes: form.notes || null,
                     };
-                    const url    = modalMode==='add' ? `${getPortalApi()}/vehicles` : `${getPortalApi()}/vehicles/${selVehicle.id}`;
+                    const url    = modalMode==='add' ? `${HRMS_API}/vehicles` : `${HRMS_API}/vehicles/${selVehicle.id}`;
                     const method = modalMode==='add' ? 'POST' : 'PATCH';
                     const res = await authFetch(url, { method, body:JSON.stringify(payload) });
                     if (!res.ok) {
@@ -9462,7 +9462,7 @@
             const handleDelete = async () => {
                 if (!delConfirm) return;
                 try {
-                    const res  = await authFetch(`${getPortalApi()}/vehicles/${delConfirm.id}`, { method:'DELETE' });
+                    const res  = await authFetch(`${HRMS_API}/vehicles/${delConfirm.id}`, { method:'DELETE' });
                     const data = await res.json();
                     if (!res.ok) throw new Error(data.message || data.error || 'Delete failed');
                     setDelConfirm(null);
@@ -9475,7 +9475,7 @@
             const updateAlertConfig = async (key, patch) => {
                 setAlertSaving(s => ({...s, [key]: true}));
                 try {
-                    const res = await authFetch(`${getPortalApi()}/vehicles/alert-settings/${key}`, {
+                    const res = await authFetch(`${HRMS_API}/vehicles/alert-settings/${key}`, {
                         method: 'PUT', body: JSON.stringify(patch),
                     });
                     if (res.ok) {
@@ -9490,7 +9490,7 @@
             const testAlert = async (key) => {
                 setAlertTesting(s => ({...s, [key]: true}));
                 try {
-                    const res = await authFetch(`${getPortalApi()}/vehicles/alert-settings/${key}/test`, { method: 'POST' });
+                    const res = await authFetch(`${HRMS_API}/vehicles/alert-settings/${key}/test`, { method: 'POST' });
                     const d = await res.json();
                     showToast(res.ok ? (d.message || 'Test sent') : 'Test failed', res.ok ? 'success' : 'error');
                 } catch(e) { showToast('Test failed', 'error'); }
