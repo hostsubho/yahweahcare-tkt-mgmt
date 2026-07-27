@@ -1,5 +1,5 @@
 // ============================================================
-// Auth service â user lookup, provisioning, session management
+// Auth service — user lookup, provisioning, session management
 // ============================================================
 
 import bcrypt from 'bcryptjs';
@@ -33,9 +33,9 @@ export interface UserRecord {
  * Look up a user from a Microsoft Graph profile after SSO.
  *
  * STRICT ALLOWLIST: the user MUST already exist in the staff database.
- * - If the email domain isn't approved â 403 disallowed_domain
- * - If no DB record matches the email or microsoftId â 403 not_authorized
- * - If the record exists but `active = false` â 403 account_inactive
+ * - If the email domain isn't approved → 403 disallowed_domain
+ * - If no DB record matches the email or microsoftId → 403 not_authorized
+ * - If the record exists but `active = false` → 403 account_inactive
  * - Otherwise the user is synced (name/photo/dept/etc.) and returned.
  *
  * Auto-provisioning is intentionally disabled. New staff must be added
@@ -56,7 +56,7 @@ export async function provisionFromGraph(
     throw Object.assign(new Error(check.reason), { statusCode: 403, code: 'disallowed_domain' });
   }
 
-  // 2. DB-allowlist check â must already exist
+  // 2. DB-allowlist check — must already exist
   // Column mapping: production DB uses azure_oid (not microsoft_id), is_active, is_bootstrap_admin
   const { rows } = await pool.query<UserRecord>(
     `SELECT u.id, u.email, u.name,
@@ -96,18 +96,21 @@ export async function provisionFromGraph(
     );
   }
 
-  // 4. Sync â update only columns confirmed to exist in production DB
+  // 4. Sync — update columns confirmed to exist in production DB.
+  //    profile_photo_url is only overwritten when Graph actually returned a photo
+  //    (null means "Graph returned nothing" — keep whatever is already stored).
   await pool.query(
     `UPDATE yc_tkt_mgmt.users SET
-       name       = COALESCE($1, name),
-       azure_oid  = COALESCE(azure_oid, $2),
-       updated_at = NOW()
+       name              = COALESCE($1, name),
+       azure_oid         = COALESCE(azure_oid, $2),
+       profile_photo_url = CASE WHEN $4::text IS NOT NULL THEN $4::text ELSE profile_photo_url END,
+       updated_at        = NOW()
      WHERE id = $3`,
-    [graphUser.displayName, graphUser.id, user.id]
+    [graphUser.displayName, graphUser.id, user.id, profilePhoto]
   );
-  // Reflect the synced name in the returned object so the caller has the up-to-date value
-  // (the SELECT above captured the pre-update name; if Microsoft provides a displayName, prefer it)
+  // Reflect synced values in the returned object
   if (graphUser.displayName) user.name = graphUser.displayName;
+  if (profilePhoto) user.profile_photo_url = profilePhoto;
   return user;
 }
 
@@ -124,7 +127,7 @@ export async function createSession(opts: {
   const { user, rememberMe, req, positionType } = opts;
 
   // Lookup permissions for the JWT payload
-  // DB uses role TEXT (not role_id FK) â look up via roles.name join if available,
+  // DB uses role TEXT (not role_id FK) — look up via roles.name join if available,
   // otherwise return empty array so login still succeeds.
   let permissions: string[] = [];
   try {
@@ -137,7 +140,7 @@ export async function createSession(opts: {
     );
     permissions = perms.map(p => p.name);
   } catch {
-    // roles/permissions tables not yet migrated â proceed with empty permissions
+    // roles/permissions tables not yet migrated — proceed with empty permissions
     permissions = [];
   }
 
@@ -181,7 +184,7 @@ export async function createSession(opts: {
 }
 
 /**
- * Rotate the refresh token â issue a new one, blacklist the old one.
+ * Rotate the refresh token — issue a new one, blacklist the old one.
  */
 interface RotateSessionRow {
   id: number;
@@ -223,7 +226,7 @@ export async function rotateTokens(sessionId: number, refreshToken: string, req:
 
   const matches = await bcrypt.compare(refreshToken, s.refresh_token_hash);
   if (!matches) {
-    // Possible token theft â revoke this session
+    // Possible token theft — revoke this session
     await pool.query(`UPDATE yc_tkt_mgmt.sessions SET is_revoked = TRUE, revoked_reason = 'refresh_mismatch' WHERE id = $1`, [sessionId]);
     throw Object.assign(new Error('Refresh token mismatch'), { statusCode: 401 });
   }
@@ -272,7 +275,7 @@ export async function revokeAllUserSessions(userId: number, reason: string, req?
 }
 
 // ============================================================
-// PKCE verifier + state â persisted via signed HTTP-only cookie.
+// PKCE verifier + state — persisted via signed HTTP-only cookie.
 // (In-memory Map was used previously, but serverless cold starts
 // would lose it. Cookies work in both server and serverless.)
 // ============================================================
