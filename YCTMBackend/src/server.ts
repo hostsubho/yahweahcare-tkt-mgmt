@@ -24,6 +24,7 @@ import notificationRoutes  from './modules/notifications/notifications.routes';
 import pushRoutes          from './modules/notifications/push.routes';
 import lookupRoutes        from './modules/lookup/lookup.routes';
 import orgRoutes           from './modules/org/org.routes';
+import vehicleRoutes       from './modules/vehicles/vehicles.routes';
 import { ensurePushTable } from './modules/notifications/notifications.service';
 
 const app = express();
@@ -73,6 +74,7 @@ app.use('/notifications',  apiLimiter);
 app.use('/push',           apiLimiter);
 app.use('/lookup',         apiLimiter);
 app.use('/org',            apiLimiter);
+app.use('/vehicles',       apiLimiter);
 
 // ─── Routes ────────────────────────────────────────────────
 app.use('/auth',           authRoutes);
@@ -85,6 +87,7 @@ app.use('/notifications',  notificationRoutes);
 app.use('/push',           pushRoutes);
 app.use('/lookup',         lookupRoutes);
 app.use('/org',            orgRoutes);
+app.use('/vehicles',       vehicleRoutes);
 
 // ─── 404 + error handler ───────────────────────────────────
 app.use(notFound);

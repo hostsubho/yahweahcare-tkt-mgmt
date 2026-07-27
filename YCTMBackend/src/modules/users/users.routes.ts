@@ -59,6 +59,7 @@ router.get('/', optionalAuth, async (req, res, next) => {
       'SELECT u.id, u.email, u.name, u.is_active, u.department_id, u.position_id, u.created_at,' +
       ' u.phone, u.address, u.profile_photo_url, u.avatar_initials,' +
       ' COALESCE(u.is_bootstrap_admin, FALSE) AS is_bootstrap_admin,' +
+      ' COALESCE(u.vehicle_access, FALSE) AS vehicle_access,' +
       ' d.name AS department_name,' +
       ' (SELECT COALESCE(json_agg(' +
       "   json_build_object('id',p2.id,'title',p2.title,'type',COALESCE(p2.position_type,'ops'),'is_primary',sp2.is_primary)" +
@@ -215,7 +216,7 @@ router.patch('/:id', requireAuth, async (req, res, next) => {
       name: 'name', email: 'email',
       department_id: 'department_id', position_id: 'position_id',
       is_active: 'is_active', phone: 'phone', address: 'address',
-      profile_photo_url: 'profile_photo_url',
+      profile_photo_url: 'profile_photo_url', vehicle_access: 'vehicle_access',
     };
     const updates: string[] = []; const values: unknown[] = []; let i = 1;
     for (const [key, col] of Object.entries(fieldMap)) {
