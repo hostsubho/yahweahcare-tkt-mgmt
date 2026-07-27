@@ -759,9 +759,22 @@
         // Full-page loading screen — white/light branded, consistent across the app
         function LoadingScreen({ message = 'Loading…' }) {
             return (
-                <div style={{minHeight:'100vh',width:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',background:'#F8FAFC',fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'}}>
-                    <YCLoader size={56} />
-                    <p style={{marginTop:16,fontSize:14,color:'#64748B',fontWeight:500}}>{message}</p>
+                <div style={{
+                    minHeight:'100vh', width:'100%', display:'flex', flexDirection:'column',
+                    alignItems:'center', justifyContent:'center',
+                    background:'linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F172A 100%)',
+                    fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+                    position:'relative', overflow:'hidden',
+                }}>
+                    {/* Purple brand glow orbs */}
+                    <div style={{position:'absolute',top:0,left:0,right:0,bottom:0,pointerEvents:'none',overflow:'hidden'}}>
+                        <div style={{position:'absolute',top:'-20%',left:'-10%',width:600,height:600,borderRadius:'50%',background:'radial-gradient(circle, rgba(109,39,115,0.12) 0%, transparent 70%)'}}/>
+                        <div style={{position:'absolute',bottom:'-20%',right:'-10%',width:500,height:500,borderRadius:'50%',background:'radial-gradient(circle, rgba(131,47,138,0.10) 0%, transparent 70%)'}}/>
+                    </div>
+                    <div style={{position:'relative',zIndex:1,display:'flex',flexDirection:'column',alignItems:'center'}}>
+                        <YCLoader size={56} />
+                        <p style={{marginTop:16,fontSize:14,color:'#94A3B8',fontWeight:500,letterSpacing:'0.01em'}}>{message}</p>
+                    </div>
                 </div>
             );
         }
@@ -1264,7 +1277,14 @@
 
         // ── Login Page (initial / not-yet-authenticated) ──────────────────────────
         function LoginPage({ onSignIn }) {
-            const [hovered, setHovered] = React.useState(false);
+            const [hovered,    setHovered]    = React.useState(false);
+            const [signingIn,  setSigningIn]  = React.useState(false);
+
+            const handleClick = () => {
+                if (signingIn) return;
+                setSigningIn(true);
+                onSignIn();
+            };
 
             return (
                 <div style={{
@@ -1302,28 +1322,51 @@
                         </p>
 
                         <button
-                            onClick={onSignIn}
-                            onMouseEnter={() => setHovered(true)}
+                            onClick={handleClick}
+                            disabled={signingIn}
+                            onMouseEnter={() => !signingIn && setHovered(true)}
                             onMouseLeave={() => setHovered(false)}
                             style={{
-                                width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:10,
-                                padding:'13px 0',borderRadius:12,border:'none',cursor:'pointer',
-                                background: hovered ? '#5D2162' : '#6D2773',
-                                color:'white',fontSize:14,fontWeight:700,
-                                boxShadow: hovered ? '0 4px 14px rgba(109,39,115,0.4)' : '0 2px 8px rgba(109,39,115,0.3)',
+                                width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:10,
+                                padding:'13px 0', borderRadius:12, border:'none',
+                                cursor: signingIn ? 'default' : 'pointer',
+                                background: signingIn ? '#5D2162' : hovered ? '#5D2162' : '#6D2773',
+                                color:'white', fontSize:14, fontWeight:700,
+                                boxShadow: signingIn ? '0 4px 14px rgba(109,39,115,0.25)' : hovered ? '0 4px 14px rgba(109,39,115,0.4)' : '0 2px 8px rgba(109,39,115,0.3)',
                                 transition:'all 0.2s',
+                                opacity: signingIn ? 0.85 : 1,
                             }}
                         >
-                            <svg width="18" height="18" viewBox="0 0 21 21" fill="none" style={{flexShrink:0}}>
-                                <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
-                                <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
-                                <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
-                                <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
-                            </svg>
-                            Sign in with Microsoft
+                            {signingIn ? (
+                                <>
+                                    <div style={{
+                                        width:18, height:18, borderRadius:'50%', flexShrink:0,
+                                        border:'2.5px solid rgba(255,255,255,0.35)',
+                                        borderTopColor:'#fff',
+                                        animation:'spin 0.75s linear infinite',
+                                    }}/>
+                                    Signing in…
+                                </>
+                            ) : (
+                                <>
+                                    <svg width="18" height="18" viewBox="0 0 21 21" fill="none" style={{flexShrink:0}}>
+                                        <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
+                                        <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
+                                        <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+                                        <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+                                    </svg>
+                                    Sign in with Microsoft
+                                </>
+                            )}
                         </button>
 
-                        <p style={{fontSize:11,color:'#475569',margin:'20px 0 0',lineHeight:1.5}}>
+                        {signingIn && (
+                            <p style={{fontSize:12,color:'#6D2773',margin:'14px 0 0',fontWeight:600,letterSpacing:'0.01em'}}>
+                                Redirecting to Microsoft…
+                            </p>
+                        )}
+
+                        <p style={{fontSize:11,color:'#475569',margin: signingIn ? '8px 0 0' : '20px 0 0',lineHeight:1.5}}>
                             Secure login via Microsoft Entra ID.<br/>Contact your administrator if you need access.
                         </p>
                     </div>
@@ -1405,7 +1448,14 @@
 
         // ── Branded Signed-Out / Session-Expired Screen ───────────────────────────
         function SignedOutScreen({ onSignBackIn, authError }) {
-            const [hovered, setHovered] = React.useState(false);
+            const [hovered,   setHovered]   = React.useState(false);
+            const [signingIn, setSigningIn] = React.useState(false);
+
+            const handleClick = () => {
+                if (signingIn) return;
+                setSigningIn(true);
+                onSignBackIn();
+            };
 
             return (
                 <div style={{
@@ -1466,29 +1516,52 @@
 
                         {/* Sign in button */}
                         <button
-                            onClick={onSignBackIn}
-                            onMouseEnter={() => setHovered(true)}
+                            onClick={handleClick}
+                            disabled={signingIn}
+                            onMouseEnter={() => !signingIn && setHovered(true)}
                             onMouseLeave={() => setHovered(false)}
                             style={{
                                 width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:10,
-                                padding:'13px 0', borderRadius:12, border:'none', cursor:'pointer',
-                                background: hovered ? '#5D2162' : '#6D2773',
+                                padding:'13px 0', borderRadius:12, border:'none',
+                                cursor: signingIn ? 'default' : 'pointer',
+                                background: signingIn ? '#5D2162' : hovered ? '#5D2162' : '#6D2773',
                                 color:'white', fontSize:14, fontWeight:700,
-                                boxShadow: hovered ? '0 4px 14px rgba(109,39,115,0.4)' : '0 2px 8px rgba(109,39,115,0.3)',
+                                boxShadow: signingIn ? '0 4px 14px rgba(109,39,115,0.25)' : hovered ? '0 4px 14px rgba(109,39,115,0.4)' : '0 2px 8px rgba(109,39,115,0.3)',
                                 transition:'all 0.2s',
+                                opacity: signingIn ? 0.85 : 1,
                             }}
                         >
-                            <svg width="18" height="18" viewBox="0 0 21 21" fill="none" style={{flexShrink:0}}>
-                                <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
-                                <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
-                                <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
-                                <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
-                            </svg>
-                            Sign in with Microsoft
+                            {signingIn ? (
+                                <>
+                                    <div style={{
+                                        width:18, height:18, borderRadius:'50%', flexShrink:0,
+                                        border:'2.5px solid rgba(255,255,255,0.35)',
+                                        borderTopColor:'#fff',
+                                        animation:'spin 0.75s linear infinite',
+                                    }}/>
+                                    Signing in…
+                                </>
+                            ) : (
+                                <>
+                                    <svg width="18" height="18" viewBox="0 0 21 21" fill="none" style={{flexShrink:0}}>
+                                        <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
+                                        <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
+                                        <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+                                        <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+                                    </svg>
+                                    Sign in with Microsoft
+                                </>
+                            )}
                         </button>
 
+                        {signingIn && (
+                            <p style={{fontSize:12, color:'#6D2773', margin:'14px 0 0', fontWeight:600, letterSpacing:'0.01em'}}>
+                                Redirecting to Microsoft…
+                            </p>
+                        )}
+
                         {/* Footer note */}
-                        <p style={{fontSize:11, color:'#475569', margin:'20px 0 0', lineHeight:1.5}}>
+                        <p style={{fontSize:11, color:'#475569', margin: signingIn ? '8px 0 0' : '20px 0 0', lineHeight:1.5}}>
                             Secure login via Microsoft Entra ID.<br/>Contact your administrator if you have trouble signing in.
                         </p>
                     </div>

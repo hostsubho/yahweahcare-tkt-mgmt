@@ -4,11 +4,11 @@
     <!-- Preload critical scripts — browser fetches these in parallel during HTML parse -->
     <link rel="preload" as="script" href="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js" crossorigin>
     <link rel="preload" as="script" href="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin>
-    <link rel="preload" as="script" href="app.js?v=a0388e24">
+    <link rel="preload" as="script" href="app.js?v=16c59250">
     <!-- CDN connection hints -->
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="preconnect" href="https://yahweahcare-tkt-mgmt-hx48.vercel.app" crossorigin>
-    <!-- Inject API URL — overrides the default in app.js?v=a0388e24.
+    <!-- Inject API URL — overrides the default in app.js?v=16c59250.
          MUST match the backend that /auth/microsoft below redirects to (Vercel+Neon,
          YCTMBackend). The old Azure App Service (api/, yahweahcare-api.azurewebsites.net,
          later renamed yahweahcare-tkt-mmt-prod) does not implement the PKCE /auth/microsoft
@@ -25,7 +25,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
     <!--
       Script loading strategy:
-        • React, ReactDOM, app.js?v=a0388e24, enterprise-components — all deferred: download in parallel during HTML parse,
+        • React, ReactDOM, app.js?v=16c59250, enterprise-components — all deferred: download in parallel during HTML parse,
           execute in document order after parsing
         • Chart.js loaded on demand (lazy) by loadChartJs() only on pages that need charts
         • React/ReactDOM pinned to 18.3.1 on jsDelivr — immutably cached, no extra DNS round-trip
@@ -33,8 +33,8 @@
     -->
     <script defer src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js" crossorigin></script>
     <script defer src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
-    <script defer src="app.js?v=a0388e24"></script>
-    <script defer src="enterprise-components-compiled.js?v=1875dfe7"></script>
+    <script defer src="app.js?v=16c59250"></script>
+    <script defer src="enterprise-components-compiled.js?v=dc8fc109"></script>
     <style>
         /* ── CSS Custom Properties ──────────────────────────────────────── */
         :root {
@@ -820,7 +820,7 @@
     </style>
 </head>
 <body class="bg-gray-50">
-    <!-- Boot loader — shown while app.js?v=a0388e24 parses; React overwrites it on mount -->
+    <!-- Boot loader — shown while app.js?v=16c59250 parses; React overwrites it on mount -->
     <div id="root">
       <div id="app-boot-loader" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#F5F7FF;gap:16px;">
         <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" rx="12" fill="#6D2773"/><path d="M14 24C14 18.477 18.477 14 24 14s10 4.477 10 10-4.477 10-10 10" stroke="#fff" stroke-width="3" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 24 24" to="360 24 24" dur="0.8s" repeatCount="indefinite"/></path></svg>
@@ -876,6 +876,6 @@
         })();
     </script>
 
-    <!-- app.js?v=a0388e24 + enterprise-components-compiled.js?v=1875dfe7 are loaded via defer in <head> above -->
+    <!-- app.js?v=16c59250 + enterprise-components-compiled.js?v=dc8fc109 are loaded via defer in <head> above -->
 </body>
 </html>
