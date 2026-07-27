@@ -541,7 +541,7 @@
                 get: async () => {
                     // Cache in sessionStorage for 5 minutes — lookups are static per session
                     const CACHE_KEY = 'yc_lookups';
-                    const CACHE_TTL = 5 * 60 * 1000;
+                    const CACHE_TTL = 30 * 60 * 1000; // 30 min — lookup data is effectively static
                     try {
                         const cached = sessionStorage.getItem(CACHE_KEY);
                         if (cached) {
@@ -750,7 +750,7 @@
         // Spinning Yahweh Care logo mark — the real brand icon, used everywhere the app is loading
         function YCLoader({ size = 36 }) {
             return (
-                <div className="yc-spin" style={{display:'inline-flex',alignItems:'center',justifyContent:'center',animation:'spin 0.9s linear infinite',width:size,height:size,flexShrink:0}}>
+                <div className="yc-spin" style={{display:'inline-flex',alignItems:'center',justifyContent:'center',animation:'spin 0.9s linear infinite',width:size,height:size,flexShrink:0,willChange:'transform'}}>
                     <img src="/apple-touch-icon.png" alt="" style={{width:size,height:size,objectFit:'contain',display:'block'}}/>
                 </div>
             );
@@ -1692,7 +1692,7 @@
         }
 
         // Dashboard Page
-        function Dashboard() {
+        const Dashboard = React.memo(function Dashboard() {
             const dm = useDark();
             const cache = useTicketCache();
             const pageBg  = dm ? 'transparent' : '#F5F7FF';
@@ -2109,10 +2109,10 @@
                 {insight && <InsightDrawer data={insight} onClose={()=>setInsight(null)}/>}
             </>
             );
-        }
+        });
 
         // Create Ticket Page
-        function CreateTicket() {
+        const CreateTicket = React.memo(function CreateTicket() {
 
             const dm = useDark();
             const pageBg  = dm ? 'transparent' : '#F5F7FF';
@@ -2773,10 +2773,10 @@
                     </div>
                 </main>
             );
-        }
+        });
 
         // Tickets Page
-        function TicketsPage() {
+        const TicketsPage = React.memo(function TicketsPage() {
             const sessionUser = React.useMemo(() => getSessionUser(), []);
             const scopeParams = React.useMemo(() => getTicketScopeParams(sessionUser), []);
 
@@ -4068,7 +4068,7 @@
                     })()}
                 </main>
             );
-        }
+        });
 
         // Calendar Page
         // ── Australian Public Holidays data (2025 + 2026) ──────
@@ -4172,6 +4172,7 @@
 
         function CalendarPage() {
             const dm = useDark();
+            const cache = useTicketCache(); // shared global cache — no extra fetch needed
             const pageBg  = dm ? 'transparent' : '#F5F7FF';
             const cardBg  = dm ? 'linear-gradient(155deg,rgba(17,30,58,0.97) 0%,rgba(8,16,36,0.99) 100%)' : 'white';
             const borderC = dm ? 'rgba(109,39,115,0.16)' : '#E2E8F2';
@@ -4185,8 +4186,9 @@
             const [hoverTicket, setHoverTicket] = React.useState(null); // { ticket, x, y }
             const [dragTicket, setDragTicket]   = React.useState(null); // ticket being dragged
             const [dragOver, setDragOver]       = React.useState(null); // ds string
-            const [tickets, setTickets]   = React.useState([]);
-            const [loading, setLoading]   = React.useState(true);
+            // Use tickets from global cache — renders instantly when cache is ready
+            const [tickets, setTickets]   = React.useState(() => cache.tickets);
+            const [loading, setLoading]   = React.useState(() => !cache.ready);
             const [viewTicket, setViewTicket]   = React.useState(null); // ticket shown in quick-view modal
             const [toast, setToast]             = React.useState(null); // { msg, type }
             const [rescheduling, setRescheduling] = React.useState(false);
@@ -4198,12 +4200,13 @@
             };
             React.useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
+            // Sync with global cache updates (e.g. 60-second auto-refresh)
             React.useEffect(() => {
-                setLoading(true);
-                API.tickets.getAll({ all: '1', limit: 500 }).then(data => {
-                    setTickets(data.tickets || []);
-                }).catch(() => setTickets([])).finally(() => setLoading(false));
-            }, []);
+                if (cache.ready) {
+                    setTickets(cache.tickets);
+                    setLoading(false);
+                }
+            }, [cache.tickets, cache.ready]);
 
             // ── Helpers ──────────────────────────────────────────
             const pad     = n => String(n).padStart(2,'0');
@@ -5038,7 +5041,7 @@
         // Metrics: assigned, resolved, pending, resolution rate,
         //          avg resolution time, SLA compliance, escalations,
         //          overdue, high/critical tickets + auto insights
-        function StaffPerformancePage() {
+        const StaffPerformancePage = React.memo(function StaffPerformancePage() {
             const dm = useDark();
             const pageBg  = dm ? 'transparent' : '#F5F7FF';
             const cardBg  = dm ? 'linear-gradient(155deg,rgba(17,30,58,0.97) 0%,rgba(8,16,36,0.99) 100%)' : 'white';
@@ -5401,7 +5404,7 @@
                     </div>
                 </main>
             );
-        }
+        });
 
         // ── Team insight helpers ─────────────────────────────────
         const isResT = t => { const s=(t.status||'').toLowerCase(); return t.isClosed||s==='resolved'||s==='closed'; };
@@ -5445,7 +5448,7 @@
         };
 
         // Team Comparison Page
-        function TeamComparisonPage() {
+        const TeamComparisonPage = React.memo(function TeamComparisonPage() {
             const dm = useDark();
             const pageBg  = dm ? 'transparent' : '#F5F7FF';
             const cardBg  = dm ? 'linear-gradient(155deg,rgba(17,30,58,0.97) 0%,rgba(8,16,36,0.99) 100%)' : 'white';
@@ -5893,10 +5896,10 @@
                     </div>
                 </main>
             );
-        }
+        });
 
         // Analytics Page
-        function AnalyticsPage() {
+        const AnalyticsPage = React.memo(function AnalyticsPage() {
 
             const dm = useDark();
             const cache = useTicketCache();
@@ -6346,7 +6349,7 @@
                 </main>
                 <InsightDrawer data={insight} onClose={()=>setInsight(null)}/>
             </>);
-        }
+        });
 
         // Org Chart Page
         // ── Org Chart helpers (defined outside to keep stable references) ──
@@ -6578,7 +6581,7 @@
             );
         }
 
-        function OrgChartPage() {
+        const OrgChartPage = React.memo(function OrgChartPage() {
 
             const dm = useDark();
             const pageBg  = dm ? 'transparent' : '#F5F7FF';
@@ -6898,12 +6901,12 @@
                     </div>
                 </main>
             );
-        }
+        });
 
         // ============================================================
         // STAFF MANAGEMENT PAGE
         // ============================================================
-        function StaffManagementPage() {
+        const StaffManagementPage = React.memo(function StaffManagementPage() {
             const EMP_TYPES = { full_time:'Full Time', part_time:'Part Time', casual:'Casual', contractor:'Contractor' };
             const POS_TYPES  = ['director','ops','finance','strategic','staff','external'];
             const EMPTY_FORM = {
@@ -7554,10 +7557,10 @@
                     )}
                 </main>
             );
-        }
+        });
 
         // ── Ticket Log Page ───────────────────────────────────────────────────────
-        function TicketLogPage() {
+        const TicketLogPage = React.memo(function TicketLogPage() {
             const dm = useDark();
             const sessionUser = React.useMemo(() => getSessionUser(), []);
 
@@ -8049,10 +8052,10 @@
                     </div>
                 </main>
             );
-        }
+        });
 
         // Scheduled Reports Page
-        function ScheduledReportsPage() {
+        const ScheduledReportsPage = React.memo(function ScheduledReportsPage() {
             const dm = useDark();
             const pageBg  = dm ? 'transparent' : '#F5F7FF';
             const cardBg  = dm ? 'linear-gradient(155deg,rgba(17,30,58,0.97) 0%,rgba(8,16,36,0.99) 100%)' : 'white';
@@ -8756,10 +8759,10 @@
                     )}
                 </main>
             );
-        }
+        });
         // ── Email Config Page (Bootstrap Admin only) ──────────────────────────────
         // ── SettingsPage — "My Profile": view own details, edit phone + address only ──
-        function SettingsPage() {
+        const SettingsPage = React.memo(function SettingsPage() {
             const dm = React.useContext(DarkModeContext);
             const [profile, setProfile]   = React.useState(null);
             const [loading, setLoading]   = React.useState(true);
@@ -8900,9 +8903,9 @@
                     </div>
                 </main>
             );
-        }
+        });
 
-        function EmailConfigPage() {
+        const EmailConfigPage = React.memo(function EmailConfigPage() {
             const dm = React.useContext(DarkModeContext);
             const BACKEND = window.location.hostname === 'localhost' ? 'http://localhost:4001' : 'https://yahweahcare-tkt-mgmt-hx48.vercel.app';
 
@@ -9200,7 +9203,7 @@
                     </div>
                 </main>
             );
-        }
+        });
 
         // ============================================================
         // VEHICLE MANAGEMENT PAGE
@@ -9296,7 +9299,7 @@
             );
         }
 
-        function VehicleManagementPage() {
+        const VehicleManagementPage = React.memo(function VehicleManagementPage() {
             const STATUS_LABELS = { active: 'Active', in_service: 'In Service', retired: 'Retired' };
             const STATUS_COLORS = { active: '#5F8F6E', in_service: '#B08D3F', retired: '#8B93A1' };
             const COMPANY_LABELS = { YC: 'Yahweh Care (YC)', YPC: 'Yahweh Property Care (YPC)' };
@@ -10234,7 +10237,7 @@
                     )}
                 </main>
             );
-        }
+        });
 
 
         // ============================================================
@@ -10244,7 +10247,7 @@
         // who rejoins Yahwehcare. Reuses the PATCH /users/:id {is_active:true}
         // route — the backend already gates activation/deactivation symmetrically
         // to bootstrap admins only (see users.routes.ts).
-        function ExStaffPage() {
+        const ExStaffPage = React.memo(function ExStaffPage() {
             const dm = React.useContext(DarkModeContext);
             const [staff, setStaff]     = React.useState([]);
             const [loading, setLoading] = React.useState(true);
@@ -10383,14 +10386,14 @@
                     )}
                 </main>
             );
-        }
+        });
 
         // ============================================================
         // ACTIVITY LOG PAGE (Bootstrap Admin only)
         // ============================================================
         // Thin viewer over GET /audit-logs (rbac.middleware.ts now lets
         // isBootstrapAdmin bypass the audit.read permission check).
-        function ActivityLogPage() {
+        const ActivityLogPage = React.memo(function ActivityLogPage() {
             const dm = React.useContext(DarkModeContext);
             const [entries, setEntries] = React.useState([]);
             const [total, setTotal]     = React.useState(0);
@@ -10866,7 +10869,7 @@
                     )}
                 </main>
             );
-        }
+        });
 
         // isMobile — module-level, stable reference (not recreated per render)
         const isMobile = () => window.innerWidth < 1024;
@@ -11066,7 +11069,8 @@
                 return <LoginPage onSignIn={handleSignBackIn} />;
             }
 
-            const allowedPages = getAccessiblePages(currentUser);
+            // Memoize — only recalculates when user role/position changes
+            const allowedPages = React.useMemo(() => getAccessiblePages(currentUser), [currentUser]);
             const renderPage = () => {
                 // Block direct URL access to pages outside the user's role
                 if (!allowedPages.includes(currentPage)) return <Dashboard />;
