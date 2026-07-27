@@ -135,7 +135,10 @@ router.get('/microsoft/callback', async (req, res, next) => {
     res.cookie('yc_refresh', refreshToken, cookieOpts((rememberMe ? 90 : 30) * 86_400_000));
     res.cookie('yc_session', sessionToken, cookieOpts((rememberMe ? 90 : 30) * 86_400_000));
 
-    // Embed user info in redirect so frontend can display correct name/id immediately
+    // Embed user info in redirect so frontend can display correct name/id immediately.
+    // NOTE: profile_photo_url is intentionally excluded here — it is a base64 JPEG
+    // (30–100KB) which would make the URL too long and get truncated by edge proxies.
+    // The frontend fetches it separately via GET /users/me after login.
     const userParam = Buffer.from(JSON.stringify({
       id:              user.id,
       name:            user.name  || '',
@@ -145,7 +148,6 @@ router.get('/microsoft/callback', async (req, res, next) => {
       positionType,
       role:            userRole,
       isBootstrapAdmin: !!(user as unknown as Record<string, unknown>).bootstrap_admin,
-      profile_photo_url: user.profile_photo_url || null,
     })).toString('base64url');
 
     // Also pass the access token so the frontend can use Authorization: Bearer

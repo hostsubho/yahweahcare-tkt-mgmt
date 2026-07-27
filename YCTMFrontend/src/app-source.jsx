@@ -10925,6 +10925,28 @@
                 } catch(e) { return null; }
             });
 
+            // ── Hydrate full profile (photo + extras) from /users/me after login ─
+            // profile_photo_url is NOT included in the login redirect URL (it's a
+            // base64 JPEG that would make the URL too long and get truncated).
+            // Fetch it once from the API after the user object is available.
+            React.useEffect(() => {
+                if (!currentUser) return;
+                // Only fetch if photo is missing — avoids re-fetching on every render
+                if (currentUser.profile_photo_url) return;
+                authFetch(`${HRMS_API}/users/me`, { noRedirect: true })
+                    .then(r => r.ok ? r.json() : null)
+                    .then(data => {
+                        if (!data?.user?.profile_photo_url) return;
+                        setCurrentUser(u => {
+                            if (!u) return u;
+                            const merged = { ...u, profile_photo_url: data.user.profile_photo_url };
+                            try { sessionStorage.setItem('ms_current_user', JSON.stringify(merged)); } catch(_) {}
+                            return merged;
+                        });
+                    })
+                    .catch(() => {}); // non-critical — app works fine without photo
+            }, [currentUser?.id]); // re-run only when the logged-in user changes
+
             // Listen for self-service profile edits (e.g. a new profile photo saved on the
             // Settings page) so the sidebar avatar updates immediately without a full reload.
             // Settings page dispatches this after a successful PATCH /users/me.
