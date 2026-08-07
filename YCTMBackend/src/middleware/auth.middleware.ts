@@ -31,6 +31,7 @@ declare module 'express-serve-static-core' {
        * actions such as deleting a position or deactivating a staff member.
        */
       isBootstrapAdmin: boolean;
+      hasVehicleAccess: boolean;
     };
   }
 }
@@ -43,6 +44,19 @@ async function fetchIsBootstrapAdmin(userId: number): Promise<boolean> {
       [userId]
     );
     return !!rows[0]?.is_bootstrap_admin;
+  } catch {
+    return false;
+  }
+}
+
+/** Look up vehicle_access flag for a user. Never throws — defaults to false. */
+async function fetchHasVehicleAccess(userId: number): Promise<boolean> {
+  try {
+    const { rows } = await pool.query(
+      `SELECT COALESCE(vehicle_access, FALSE) AS vehicle_access FROM yc_tkt_mgmt.users WHERE id = $1`,
+      [userId]
+    );
+    return !!rows[0]?.vehicle_access;
   } catch {
     return false;
   }
@@ -77,6 +91,7 @@ function buildAuth(payload: AccessTokenPayload, session: { id: number; user_id: 
     isAdmin,
     bootstrapAdmin: ['admin', 'super_admin'].includes(role.toLowerCase()),
     isBootstrapAdmin: false, // placeholder — the caller overwrites this with the real DB value
+    hasVehicleAccess: false, // placeholder — the caller overwrites this with the real DB value
   };
 }
 
@@ -109,6 +124,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     const auth = buildAuth(payload, session);
     auth.isBootstrapAdmin = await fetchIsBootstrapAdmin(session.user_id);
+    auth.hasVehicleAccess = await fetchHasVehicleAccess(session.user_id);
     req.auth = auth;
     pool.query(`UPDATE yc_tkt_mgmt.sessions SET last_activity_at = NOW() WHERE id = $1`, [session.id]).catch(() => {});
     next();
@@ -136,6 +152,7 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
 
     const auth = buildAuth(payload, session);
     auth.isBootstrapAdmin = await fetchIsBootstrapAdmin(session.user_id);
+    auth.hasVehicleAccess = await fetchHasVehicleAccess(session.user_id);
     req.auth = auth;
     pool.query(`UPDATE yc_tkt_mgmt.sessions SET last_activity_at = NOW() WHERE id = $1`, [session.id]).catch(() => {});
   } catch { /* proceed unauthenticated */ }

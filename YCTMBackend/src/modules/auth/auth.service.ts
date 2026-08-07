@@ -60,13 +60,13 @@ export async function provisionFromGraph(
   // Column mapping: production DB uses azure_oid (not microsoft_id), is_active, is_bootstrap_admin
   const { rows } = await pool.query<UserRecord>(
     `SELECT u.id, u.email, u.name,
-            NULL::text               AS role,
+            COALESCE(u.role, 'staff')::text AS role,
             NULL::integer            AS role_id,
             NULL::text               AS department,
             NULL::text               AS designation,
             u.azure_oid              AS microsoft_id,
             NULL::text               AS tenant_id,
-            NULL::text               AS profile_photo_url,
+            u.profile_photo_url,
             u.is_bootstrap_admin     AS bootstrap_admin,
             u.is_active              AS active
      FROM yc_tkt_mgmt.users u
@@ -96,18 +96,21 @@ export async function provisionFromGraph(
     );
   }
 
-  // 4. Sync — update only columns confirmed to exist in production DB
+  // 4. Sync — update columns confirmed to exist in production DB.
+  //    profile_photo_url is only overwritten when Graph actually returned a photo
+  //    (null means "Graph returned nothing" — keep whatever is already stored).
   await pool.query(
     `UPDATE yc_tkt_mgmt.users SET
-       name       = COALESCE($1, name),
-       azure_oid  = COALESCE(azure_oid, $2),
-       updated_at = NOW()
+       name              = COALESCE($1, name),
+       azure_oid         = COALESCE(azure_oid, $2),
+       profile_photo_url = CASE WHEN $4::text IS NOT NULL THEN $4::text ELSE profile_photo_url END,
+       updated_at        = NOW()
      WHERE id = $3`,
-    [graphUser.displayName, graphUser.id, user.id]
+    [graphUser.displayName, graphUser.id, user.id, profilePhoto]
   );
-  // Reflect the synced name in the returned object so the caller has the up-to-date value
-  // (the SELECT above captured the pre-update name; if Microsoft provides a displayName, prefer it)
+  // Reflect synced values in the returned object
   if (graphUser.displayName) user.name = graphUser.displayName;
+  if (profilePhoto) user.profile_photo_url = profilePhoto;
   return user;
 }
 

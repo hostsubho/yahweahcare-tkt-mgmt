@@ -21,6 +21,10 @@ router.get('/all', async (_req, res, next) => {
       const sr = await pool.query(`SELECT id, label, sort_order FROM yc_tkt_mgmt.statuses ORDER BY sort_order`);
       statRows = sr.rows;
     } catch { /* statuses table absent or missing columns — frontend uses built-in defaults */ }
+    // Lookups change only when an admin reseeds the DB — cache aggressively.
+    // s-maxage=3600 lets Vercel's edge cache serve this without hitting the DB.
+    // stale-while-revalidate=86400 keeps serving stale data while refreshing in background.
+    res.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
     res.json({ categories: cats.rows, priorities: pris.rows, statuses: statRows });
   } catch (err) { next(err); }
 });

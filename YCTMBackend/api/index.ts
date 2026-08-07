@@ -29,6 +29,7 @@ import notificationRoutes  from '../src/modules/notifications/notifications.rout
 import pushRoutes          from '../src/modules/notifications/push.routes';
 import lookupRoutes        from '../src/modules/lookup/lookup.routes';
 import orgRoutes           from '../src/modules/org/org.routes';
+import vehicleRoutes       from '../src/modules/vehicles/vehicles.routes';
 import { pool }            from '../src/db/pool';
 import { sendEmail, buildSlaBreachHtml, type SlaBreachTicket } from '../src/modules/notifications/email.service';
 import { ensureEmailTables } from '../src/services/email/email.migrate';
@@ -56,6 +57,38 @@ process.on('uncaughtException', (err) => {
 // Ensure email tables exist on first cold start (idempotent)
 ensureEmailTables().catch((e) => console.error('[startup] ensureEmailTables:', e));
 
+// ── Performance indexes — idempotent, safe on every cold start ─────────────
+// Run fire-and-forget so they don't delay the first request.
+(async () => {
+  const idxStatements = [
+    // tickets — primary query filters and sort column
+    `CREATE INDEX IF NOT EXISTS idx_tickets_status        ON yc_tkt_mgmt.tickets(status)`,
+    `CREATE INDEX IF NOT EXISTS idx_tickets_created_at    ON yc_tkt_mgmt.tickets(created_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_tickets_assigned_to   ON yc_tkt_mgmt.tickets(assigned_to)`,
+    `CREATE INDEX IF NOT EXISTS idx_tickets_created_by    ON yc_tkt_mgmt.tickets(created_by)`,
+    `CREATE INDEX IF NOT EXISTS idx_tickets_category_id   ON yc_tkt_mgmt.tickets(category_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_tickets_priority_id   ON yc_tkt_mgmt.tickets(priority_id)`,
+    // Composite covering index for the common "open tickets" list query
+    `CREATE INDEX IF NOT EXISTS idx_tickets_status_cat ON yc_tkt_mgmt.tickets(status, created_at DESC)`,
+    // comments / activity — looked up by ticket_id after the main tickets fetch
+    `CREATE INDEX IF NOT EXISTS idx_comments_ticket_id    ON yc_tkt_mgmt.comments(ticket_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_activity_ticket_id    ON yc_tkt_mgmt.activity(ticket_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_approvers_ticket_id   ON yc_tkt_mgmt.ticket_approvers(ticket_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_approvers_user_status ON yc_tkt_mgmt.ticket_approvers(approver_user_id, approval_status)`,
+    // notifications
+    `CREATE INDEX IF NOT EXISTS idx_notif_recipient ON yc_tkt_mgmt.notifications(recipient_id, status)`,
+    // users — frequently joined on id; already has email index
+    `CREATE INDEX IF NOT EXISTS idx_users_dept_id ON yc_tkt_mgmt.users(department_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_users_azure_oid ON yc_tkt_mgmt.users(azure_oid)`,
+  ];
+  for (const sql of idxStatements) {
+    await pool.query(sql).catch((e: Error) =>
+      console.warn('[startup] index skipped (may already exist):', e.message?.split('\n')[0])
+    );
+  }
+  console.log('[startup] performance indexes ensured');
+})().catch((e) => console.error('[startup] index creation error:', e));
+
 // Ensure the activity log archive table exists on first cold start (idempotent)
 ensureArchiveTable().catch((e) => console.error('[startup] ensureArchiveTable:', e));
 
@@ -80,8 +113,17 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
+// Allow both the primary frontend and the YPC webapp frontend
+const ALLOWED_ORIGINS = new Set([
+  env.FRONTEND_URL,
+  'https://ypc-tms-webapp.vercel.app',
+  'https://ypc-tms.vercel.app',
+]);
 app.use(cors({
-  origin: env.FRONTEND_URL,
+  origin: (origin, cb) => {
+    if (!origin || ALLOWED_ORIGINS.has(origin)) return cb(null, true);
+    cb(new Error('Not allowed by CORS'));
+  },
   credentials: true,
   methods: ['GET','POST','PATCH','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
@@ -121,6 +163,19 @@ app.use('/notifications', notificationRoutes);
 app.use('/push',          pushRoutes);
 app.use('/lookup',        lookupRoutes);
 app.use('/org',           orgRoutes);
+app.use('/vehicles',      apiLimiter);
+app.use('/vehicles',      vehicleRoutes);
+
+// ── /yc/* prefix aliases — for ypc-tms-webapp compatibility ──────────────
+// ypc-tms-webapp calls /yc/<route> for Yahweh Care portal requests;
+// this backend serves those same routes at the root level, so we alias them.
+app.use('/yc/auth',       apiLimiter); app.use('/yc/auth',       authRoutes);
+app.use('/yc/tickets',    apiLimiter); app.use('/yc/tickets',    ticketRoutes);
+app.use('/yc/users',      apiLimiter); app.use('/yc/users',      userRoutes);
+app.use('/yc/org',        apiLimiter); app.use('/yc/org',        orgRoutes);
+app.use('/yc/vehicles',   apiLimiter); app.use('/yc/vehicles',   vehicleRoutes);
+app.use('/yc/lookup',     apiLimiter); app.use('/yc/lookup',     lookupRoutes);
+
 app.use('/email',         apiLimiter);
 app.use('/email',         emailAdminRoutes);
 

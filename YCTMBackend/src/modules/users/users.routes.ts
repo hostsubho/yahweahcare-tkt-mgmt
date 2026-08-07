@@ -57,8 +57,9 @@ router.get('/', optionalAuth, async (req, res, next) => {
       // with the self-service My Profile page. Other non-existent columns like auth_provider,
       // employment_type, manager_id, start_date, profile_notes are still intentionally excluded.
       'SELECT u.id, u.email, u.name, u.is_active, u.department_id, u.position_id, u.created_at,' +
-      ' u.phone, u.address,' +
+      ' u.phone, u.address, u.profile_photo_url, u.avatar_initials,' +
       ' COALESCE(u.is_bootstrap_admin, FALSE) AS is_bootstrap_admin,' +
+      ' COALESCE(u.vehicle_access, FALSE) AS vehicle_access,' +
       ' d.name AS department_name,' +
       ' (SELECT COALESCE(json_agg(' +
       "   json_build_object('id',p2.id,'title',p2.title,'type',COALESCE(p2.position_type,'ops'),'is_primary',sp2.is_primary)" +
@@ -138,7 +139,7 @@ router.get('/me', requireAuth, async (req, res, next) => {
     const { rows } = await pool.query(
       `SELECT u.id, u.email, u.name, u.phone, u.address, u.employment_type, u.designation,
               u.department_id, u.role, COALESCE(u.is_bootstrap_admin, FALSE) AS is_bootstrap_admin,
-              u.avatar_initials, d.name AS department_name,
+              u.avatar_initials, u.profile_photo_url, d.name AS department_name,
               (SELECT COALESCE(json_agg(p.title ORDER BY sp.is_primary DESC NULLS LAST), '[]'::json)
                  FROM yc_tkt_mgmt.staff_positions sp
                  JOIN yc_tkt_mgmt.positions p ON p.id = sp.position_id
@@ -160,7 +161,13 @@ router.get('/me', requireAuth, async (req, res, next) => {
 router.patch('/me', requireAuth, async (req, res, next) => {
   try {
     await ensureAddressColumn();
-    const fieldMap: Record<string, string> = { phone: 'phone', address: 'address' };
+    // profile_photo_url is a base64 data URL (resized client-side to ~200x200 before
+    // upload) — cap at 1MB of text as a sanity guard against abuse, well above what a
+    // resized avatar should ever need (~15-40KB in practice).
+    if (typeof req.body?.profile_photo_url === 'string' && req.body.profile_photo_url.length > 1_000_000) {
+      return res.status(400).json({ error: 'photo_too_large', message: 'Profile photo is too large' });
+    }
+    const fieldMap: Record<string, string> = { phone: 'phone', address: 'address', profile_photo_url: 'profile_photo_url' };
     const updates: string[] = []; const values: unknown[] = []; let i = 1;
     for (const [key, col] of Object.entries(fieldMap)) {
       if (key in req.body) {
@@ -174,7 +181,7 @@ router.patch('/me', requireAuth, async (req, res, next) => {
       await pool.query(`UPDATE yc_tkt_mgmt.users SET ${updates.join(', ')}, updated_at=NOW() WHERE id=$${i}`, values);
     }
     const { rows } = await pool.query(
-      `SELECT id, email, name, phone, address FROM yc_tkt_mgmt.users WHERE id=$1`, [req.auth!.userId]
+      `SELECT id, email, name, phone, address, profile_photo_url FROM yc_tkt_mgmt.users WHERE id=$1`, [req.auth!.userId]
     );
     if (req.auth) await logAudit({ userId: req.auth.userId, actorEmail: req.auth.email, action: 'user.update', module: 'users', targetType: 'user', targetId: req.auth.userId, metadata: { changes: req.body, self: true }, req });
     res.json({ user: rows[0] });
@@ -201,11 +208,15 @@ router.patch('/:id', requireAuth, async (req, res, next) => {
       if (!domainCheck.valid) return res.status(400).json({ error: 'invalid_email_domain', message: domainCheck.reason });
     }
 
+    if (typeof req.body?.profile_photo_url === 'string' && req.body.profile_photo_url.length > 1_000_000) {
+      return res.status(400).json({ error: 'photo_too_large', message: 'Profile photo is too large' });
+    }
     // Only include columns that exist in the live DB schema
     const fieldMap: Record<string, string> = {
       name: 'name', email: 'email',
       department_id: 'department_id', position_id: 'position_id',
       is_active: 'is_active', phone: 'phone', address: 'address',
+      profile_photo_url: 'profile_photo_url', vehicle_access: 'vehicle_access',
     };
     const updates: string[] = []; const values: unknown[] = []; let i = 1;
     for (const [key, col] of Object.entries(fieldMap)) {

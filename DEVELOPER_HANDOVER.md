@@ -202,25 +202,96 @@ deleted, but don't expect them to do anything useful; the live workflows are
   filter condition with the button's gate. If you touch this area again,
   keep those two conditions in sync.
 
-## 7. Environment variables (backend)
+## 7. Environment variables — full reference
 
-See `YCTMBackend/src/config/env.ts` for the authoritative, Zod-validated
-list. Highlights:
+**Nowhere in this repo or this document are actual secret values stored —
+only variable names and purposes.** Real values live in each Vercel
+project's Settings → Environment Variables (dashboard), and locally in
+`.env.local` files that are gitignored. Never commit a `.env` file or paste
+real values into docs/chat.
 
-- `DATABASE_URL` — Neon connection string.
-- `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` / `AZURE_TENANT_ID` /
-  `AZURE_REDIRECT_URI` / `AZURE_POST_LOGOUT_REDIRECT_URI` — Microsoft Entra
-  app registration.
-- `JWT_SECRET` / `SESSION_SECRET` — must each be ≥32 chars.
-- `ALLOWED_EMAIL_DOMAINS` — comma-separated list gating who can be created
-  as staff (defaults to `yahwehcare.com.au,yahwehpc.com.au,wmxsolutions.com.au`).
-  **Known gap**: this is a flat allow-list applied to everyone; it does not
-  currently implement a "bootstrap-admin can bypass / only bootstrap-admin
-  can create another bootstrap-admin" exception, even though that's the
-  intended policy per stakeholder conversations. See §9.
-- `RESEND_API_KEY` / `EMAIL_FROM` — optional; email sending is silently
-  skipped (not erroring) if unset.
-- `CRON_SECRET` — protects the `/cron/email-retry` endpoint.
+### 7.1 Backend (`YCTMBackend`, Vercel project `yahweahcare-tkt-mgmt-hx48`)
+
+Validated at boot via Zod in `YCTMBackend/src/config/env.ts` — the app
+refuses to start if a required one is missing/invalid, so that file is the
+authoritative list. Template: `YCTMBackend/.env.example`.
+
+| Variable | Purpose | Required? |
+|---|---|---|
+| `NODE_ENV` | `development` \| `production` \| `test` | default `development` |
+| `PORT` | Local dev port only (Vercel ignores this in serverless) | default `4001` |
+| `BACKEND_URL` | This API's own public URL (used in redirect/callback construction) | yes |
+| `FRONTEND_URL` | The frontend's public URL (CORS origin, post-logout redirect) | yes |
+| `DATABASE_URL` | Neon Postgres connection string | yes |
+| `JWT_SECRET` | Signs this app's own access/refresh tokens — must be ≥32 chars | yes |
+| `SESSION_SECRET` | Signs session cookies — must be ≥32 chars | yes |
+| `COOKIE_DOMAIN` | Cookie domain scope | default `localhost` |
+| `COOKIE_SECURE` | Force `Secure` cookie flag | default `true` in prod |
+| `COOKIE_SAMESITE` | `strict`\|`lax`\|`none` | default `none` in prod |
+| `AZURE_CLIENT_ID` | Microsoft Entra app registration client ID | yes |
+| `AZURE_CLIENT_SECRET` | Microsoft Entra app registration client secret | yes |
+| `AZURE_TENANT_ID` | Entra tenant GUID (or `common`/`organizations`) | yes |
+| `AZURE_REDIRECT_URI` | Must exactly match the URI registered in Azure Portal | yes |
+| `AZURE_POST_LOGOUT_REDIRECT_URI` | Where Entra sends the user after sign-out | yes |
+| `AZURE_SCOPES` | Microsoft Graph scopes requested | default `openid profile email User.Read` |
+| `ALLOWED_EMAIL_DOMAINS` | Comma-separated domains allowed to be added as staff | default `yahwehcare.com.au,yahwehpc.com.au,wmxsolutions.com.au` — **known gap**: no bootstrap-admin bypass exception yet, see §9 |
+| `RATE_LIMIT_WINDOW_MS` / `RATE_LIMIT_MAX` | General API rate limiting | optional, has defaults |
+| `LOGIN_RATE_LIMIT_MAX` | Login-endpoint-specific rate limit | optional, has defaults |
+| `ACCOUNT_LOCK_THRESHOLD` / `ACCOUNT_LOCK_DURATION_MS` | Failed-login lockout policy | optional, has defaults |
+| `ACCESS_TOKEN_TTL` / `REFRESH_TOKEN_TTL` | Token lifetimes | default `15m` / `30d` |
+| `SESSION_INACTIVITY_TIMEOUT_MS` | Auto-logout after inactivity | default 30 min |
+| `LOG_LEVEL` | `debug`\|`info`\|`warn`\|`error` | default `info` |
+| `RESEND_API_KEY` | Email sending (Resend) — sending is silently skipped, not an error, if unset | optional |
+| `EMAIL_FROM` | From-address for outbound email | default `Yahwehcare <noreply@yahwehcare.com.au>` |
+| `CRON_SECRET` | Bearer-auth guard on `/cron/*` endpoints (SLA checks, reminders, email retry — see `vercel.json`'s `crons` block) | optional but should be set in prod |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web Push notifications — generate via `npm run generate-vapid` in `YCTMBackend` | optional (push is wired but barely used in practice, see §9) |
+
+### 7.2 Frontend (`YCTMFrontend`, Vercel project `yahweahcare-tkt-mgmt`)
+
+The frontend is static and has **no build-time env vars in the traditional
+sense** — there's nothing in Vercel's dashboard for this project that needs
+setting. Instead, the backend URL is hardcoded directly into
+`YCTMFrontend/index.html`:
+
+```html
+<script>window.__API_URL__ = "https://yahweahcare-tkt-mgmt-hx48.vercel.app";</script>
+```
+
+`app-source.jsx` reads `window.__API_URL__` (falling back to
+`localhost:4001` when `window.location.hostname === 'localhost'`). **If the
+backend's Vercel URL ever changes, this line is what needs editing** — not
+an env var change.
+
+### 7.3 CI/CD — GitHub Actions secrets (Settings → Secrets → Actions)
+
+| Secret | Used by | Notes |
+|---|---|---|
+| `AZURE_STATIC_WEB_APPS_API_TOKEN` | `deploy-frontend.yml` | Dead/disabled workflow — target Azure Static Web App no longer exists. Kept intentionally, see §2/§8. |
+| `AZURE_CREDENTIALS` | `deploy-backend.yml` | Dead/disabled workflow — targets the legacy `api/` folder's old Azure App Service. Kept intentionally, see §2/§8. |
+| `VERCEL_TOKEN` | `deploy-backend-staging.yml`, `deploy-frontend-staging.yml` | Live — Vercel personal access token used for staging deploys off the `staging` branch. |
+| `VERCEL_ORG_ID` | same two staging workflows | Vercel team/org ID. |
+| `VERCEL_API_PROJECT_ID` | `deploy-backend-staging.yml` | Vercel project ID for the staging API deploy (targets `api/`, not `YCTMBackend`). |
+| `VERCEL_WEB_PROJECT_ID` | `deploy-frontend-staging.yml` | Vercel project ID for the staging frontend deploy. |
+| `GITHUB_TOKEN` | `ci.yml`, `codeql.yml`, both `deploy-*` workflows | Auto-provided by GitHub Actions, nothing to configure. |
+
+Note the staging workflows deploy the legacy `api/` folder and `YCTMFrontend`
+to *separate* staging Vercel projects — they don't touch the two production
+projects (`yahweahcare-tkt-mgmt`, `yahweahcare-tkt-mgmt-hx48`), which
+auto-deploy straight from `main` via Vercel's Git integration (see §2).
+
+### 7.4 Where the actual values live
+
+- **Production**: each Vercel project's own Settings → Environment
+  Variables (dashboard) — this is the source of truth for what's actually
+  live.
+- **Local dev**: `.env.local` in `YCTMBackend/` (gitignored). Pull the
+  current production values with `vercel env pull .env.local
+  --environment=production` from inside `YCTMBackend/` (requires `vercel
+  login` and the project linked first).
+- Vercel also injects its own automatic system env vars at build/runtime
+  (`VERCEL_ENV`, `VERCEL_URL`, `VERCEL_OIDC_TOKEN`, etc.) — these aren't set
+  manually and aren't listed above; the OIDC token in particular is
+  short-lived (~12h) and rotates automatically.
 
 ## 8. Repo hygiene notes
 

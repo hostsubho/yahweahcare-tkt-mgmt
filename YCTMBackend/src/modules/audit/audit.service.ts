@@ -23,7 +23,9 @@ export type AuditAction =
   | 'org.move'
   | 'schedule.create' | 'schedule.update' | 'schedule.delete' | 'schedule.send_now'
   | 'ticket.create' | 'ticket.update' | 'ticket.delete' | 'ticket.comment' | 'ticket.assign'
-  | 'ticket.complete' | 'ticket.approve' | 'ticket.reject' | 'ticket.escalate' | 'ticket.reopen' | 'ticket.close';
+  | 'ticket.complete' | 'ticket.approve' | 'ticket.reject' | 'ticket.escalate' | 'ticket.reopen' | 'ticket.close'
+  | 'vehicle.create' | 'vehicle.update' | 'vehicle.delete'
+  | 'vehicle_alert.update';
 
 export interface AuditEntry {
   userId?: number | null;
