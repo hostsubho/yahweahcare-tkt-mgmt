@@ -25,6 +25,7 @@ import {
 // Helper: extract portal from X-Portal request header ('YPC' | 'YC')
 function getPortal(req: Request): 'YPC' | 'YC' | undefined {
   const p = req.headers['x-portal'];
+  console.log(`[portal] X-Portal header: ${JSON.stringify(p)} → ${p === 'YPC' || p === 'YC' ? p : 'undefined'}`);
   if (p === 'YPC' || p === 'YC') return p as 'YPC' | 'YC';
   return undefined;
 }
