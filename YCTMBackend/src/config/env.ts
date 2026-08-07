@@ -44,7 +44,12 @@ const schema = z.object({
 
   // ── Email (Resend) — optional; email silently skipped if not set ──
   RESEND_API_KEY: z.string().optional(),
+  // Shared fallback from address (used when portal is unknown)
   EMAIL_FROM: z.string().default('Yahwehcare <noreply@yahwehcare.com.au>'),
+  // Portal-specific from addresses — override EMAIL_FROM per portal
+  // Named to match the existing Vercel non-sensitive env vars
+  EMAIL_FROM_YPC: z.string().default('Yahweh Property Care <noreply@yahwehpc.com.au>'),
+  EMAIL_FROM_YC:  z.string().default('Yahweh Care <noreply@yahwehcare.com.au>'),
   CRON_SECRET: z.string().optional(),
 });
 

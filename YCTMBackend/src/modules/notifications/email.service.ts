@@ -571,14 +571,27 @@ export function buildSlaBreachHtml(tickets: SlaBreachTicket[]): string {
   return baseLayout('SLA Breach Alert', body);
 }
 
+// ── Portal → from address resolver ───────────────────────
+function resolveFromAddress(portal?: 'YPC' | 'YC'): string {
+  if (portal === 'YPC') return env.EMAIL_FROM_YPC;
+  if (portal === 'YC')  return env.EMAIL_FROM_YC;
+  return env.EMAIL_FROM; // fallback when portal is unknown
+}
+
 // ── Core send ─────────────────────────────────────────────
-export async function sendEmail(to: string | string[], subject: string, html: string): Promise<void> {
+export async function sendEmail(
+  to: string | string[],
+  subject: string,
+  html: string,
+  portal?: 'YPC' | 'YC',
+): Promise<void> {
   const client = getResend();
   if (!client) { console.warn('[email] RESEND_API_KEY not configured — email skipped'); return; }
   const recipients = (Array.isArray(to) ? to : [to]).filter(Boolean);
   if (!recipients.length) return;
+  const from = resolveFromAddress(portal);
   try {
-    const { error } = await client.emails.send({ from: env.EMAIL_FROM, to: recipients, subject, html });
+    const { error } = await client.emails.send({ from, to: recipients, subject, html });
     if (error) console.error('[email] Resend error:', error);
   } catch (err) {
     console.error('[email] send failed:', err);
@@ -594,7 +607,7 @@ export async function sendTicketEventEmailToRole(
   if (!recipientEmails.length) return;
   const subject = buildSubject(ev, role);
   const html    = buildTicketEventHtml(ev, env.FRONTEND_URL, role);
-  await sendEmail(recipientEmails, subject, html);
+  await sendEmail(recipientEmails, subject, html, ev.portal);
 }
 
 // ── Legacy: send same email to all recipients (used as fallback) ──
@@ -602,7 +615,7 @@ export async function sendTicketEventEmail(ev: TicketEvent, recipientEmails: str
   if (!recipientEmails.length) return;
   const subject = buildSubject(ev, 'admin');
   const html    = buildTicketEventHtml(ev, env.FRONTEND_URL, 'admin');
-  await sendEmail(recipientEmails, subject, html);
+  await sendEmail(recipientEmails, subject, html, ev.portal);
 }
 
 // ── User event email — role-aware (target vs admin) ──────

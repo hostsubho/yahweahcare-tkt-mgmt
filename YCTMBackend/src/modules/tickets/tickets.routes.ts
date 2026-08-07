@@ -2,7 +2,7 @@
 // Tickets routes — full CRUD + comments + activity
 // ============================================================
 
-import { Router } from 'express';
+import { Router, Request } from 'express';
 import { pool } from '../../db/pool';
 import { requireAuth, optionalAuth } from '../../middleware/auth.middleware';
 import { logAudit } from '../audit/audit.service';
@@ -21,6 +21,13 @@ import {
   notifyExtensionApproved,
   notifyExtensionRejected,
 } from '../../services/email/notification.service';
+
+// Helper: extract portal from X-Portal request header ('YPC' | 'YC')
+function getPortal(req: Request): 'YPC' | 'YC' | undefined {
+  const p = req.headers['x-portal'];
+  if (p === 'YPC' || p === 'YC') return p as 'YPC' | 'YC';
+  return undefined;
+}
 
 // Helper: get actor name + ticket dept from DB
 async function getActorName(userId: number | null): Promise<string | undefined> {
@@ -593,9 +600,7 @@ router.post('/', requireAuth, async (req, res, next) => {
     if (!resolvedTitle || !resolvedCategory || !resolvedPriority) {
       return res.status(400).json({ error: 'missing_fields', message: 'title, category and priority are required' });
     }
-    if (!resolvedDueDate) {
-      return res.status(400).json({ error: 'missing_fields', message: 'expected_completion is required' });
-    }
+    // expected_completion is optional — null is accepted
     if (!resolvedAssignee) {
       return res.status(400).json({ error: 'missing_fields', message: 'An assignee is required' });
     }
@@ -693,7 +698,7 @@ router.post('/', requireAuth, async (req, res, next) => {
       type: 'ticket.created', ticketId, ticketTitle: resolvedTitle,
       actorId: actorId!, actorName, creatorId: actorId ?? undefined,
       assigneeId: resolvedAssignee ? Number(resolvedAssignee) : undefined,
-      approverIds: resolvedApprovers, deptId,
+      approverIds: resolvedApprovers, deptId, portal: getPortal(req),
     }).catch(() => {});
     await notifyTicketCreated(ticketId, actorId!).catch(() => {});
     // If critical/urgent priority — fire extra notification to escalation chain
@@ -707,7 +712,7 @@ router.post('/', requireAuth, async (req, res, next) => {
           type: 'ticket.critical', ticketId, ticketTitle: resolvedTitle,
           actorId: actorId!, actorName, creatorId: actorId ?? undefined,
           assigneeId: resolvedAssignee ? Number(resolvedAssignee) : undefined,
-          deptId,
+          deptId, portal: getPortal(req),
         }).catch(() => {});
       }
     } catch (_) {}
@@ -792,7 +797,7 @@ router.post('/:id/complete', requireAuth, async (req, res, next) => {
       type: 'ticket.completed', ticketId: id, ticketTitle: tRows[0].title,
       actorId: actorId!, actorName, creatorId: tRows[0].created_by ?? undefined,
       assigneeId: tRows[0].assigned_to ?? undefined,
-      approverIds: apIdsC.map(r => r.approver_user_id), deptId,
+      approverIds: apIdsC.map(r => r.approver_user_id), deptId, portal: getPortal(req),
     }).catch(() => {});
     await notifyResolutionSubmitted(id, actorId!).catch(() => {});
 
@@ -880,7 +885,7 @@ router.post('/:id/approve', requireAuth, async (req, res, next) => {
     await notify({
       type: 'ticket.approved', ticketId: id, ticketTitle: tInfo2[0]?.title ?? `Ticket #${id}`,
       actorId: userId, actorName: actorName2, creatorId: tInfo2[0]?.created_by ?? undefined,
-      assigneeId: tInfo2[0]?.assigned_to ?? undefined, deptId: deptId2,
+      assigneeId: tInfo2[0]?.assigned_to ?? undefined, deptId: deptId2, portal: getPortal(req),
     }).catch(() => {});
     await notifyTicketApproved(id, userId, acceptanceNote ?? undefined).catch(() => {});
 
@@ -955,7 +960,7 @@ router.post('/:id/reject', requireAuth, async (req, res, next) => {
     await notify({
       type: 'ticket.rejected', ticketId: id, ticketTitle: tInfo3[0]?.title ?? `Ticket #${id}`,
       actorId: userId, actorName: actorName3, creatorId: tInfo3[0]?.created_by ?? undefined,
-      assigneeId: tInfo3[0]?.assigned_to ?? undefined, deptId: deptId3,
+      assigneeId: tInfo3[0]?.assigned_to ?? undefined, deptId: deptId3, portal: getPortal(req),
     }).catch(() => {});
     await notifyTicketRejected(id, userId, justification).catch(() => {});
 
@@ -1035,7 +1040,7 @@ router.post('/:id/reopen', requireAuth, async (req, res, next) => {
     await notify({
       type: 'ticket.reopened', ticketId: id, ticketTitle: tInfoR[0]?.title ?? `Ticket #${id}`,
       actorId: userId, actorName: actorNameR, creatorId: tInfoR[0]?.created_by ?? undefined,
-      assigneeId: tInfoR[0]?.assigned_to ?? undefined, deptId: deptIdR,
+      assigneeId: tInfoR[0]?.assigned_to ?? undefined, deptId: deptIdR, portal: getPortal(req),
     }).catch(() => {});
     await notifyTicketReopened(id, userId, justification).catch(() => {});
 
@@ -1096,7 +1101,7 @@ router.post('/:id/close', requireAuth, async (req, res, next) => {
     await notify({
       type: 'ticket.closed', ticketId: id, ticketTitle: tRows[0].title,
       actorId: userId, actorName: closerName, creatorId: tRows[0].created_by ?? undefined,
-      assigneeId: tRows[0].assigned_to ?? undefined, deptId: deptIdC,
+      assigneeId: tRows[0].assigned_to ?? undefined, deptId: deptIdC, portal: getPortal(req),
     }).catch(() => {});
     await notifyTicketClosed(id, userId).catch(() => {});
 
@@ -1231,7 +1236,7 @@ router.patch('/:id', requireAuth, async (req, res, next) => {
       await notify({
         type: 'ticket.assigned', ticketId: id, ticketTitle: (old.title as string),
         actorId: actorId!, actorName: actorNameA,
-        assigneeId: Number(req.body.assigneeId), deptId: deptIdA,
+        assigneeId: Number(req.body.assigneeId), deptId: deptIdA, portal: getPortal(req),
       }).catch(() => {});
     }
 
@@ -1242,7 +1247,8 @@ router.patch('/:id', requireAuth, async (req, res, next) => {
       await notify({
         type: 'ticket.status_changed', ticketId: id, ticketTitle: (old.title as string),
         actorId: actorId!, actorName: actorNameU, extra: req.body.status,
-        creatorId: old.created_by ?? undefined, assigneeId: old.assigned_to ?? undefined, deptId: deptIdU,
+        creatorId: old.created_by ?? undefined, assigneeId: old.assigned_to ?? undefined,
+        deptId: deptIdU, portal: getPortal(req),
       }).catch(() => {});
     }
 
@@ -1332,6 +1338,7 @@ router.post('/:id/request-extension', requireAuth, async (req, res, next) => {
       actorId: actorId!, actorName, creatorId: tRows[0].created_by ?? undefined,
       assigneeId: tRows[0].assigned_to ?? undefined,
       approverIds: allAp.map(r => r.approver_user_id), deptId, extra: newDueDate,
+      portal: getPortal(req),
     }).catch(() => {});
     await notifyExtensionRequested(id, actorId!, newDueDate, note?.trim()).catch(() => {});
 
@@ -1408,6 +1415,7 @@ router.post('/:id/respond-extension', requireAuth, async (req, res, next) => {
       assigneeId: tRows[0].assigned_to ?? undefined,
       approverIds: allAp.map(r => r.approver_user_id), deptId,
       extra: action === 'approve' ? tRows[0].extension_requested_due : undefined,
+      portal: getPortal(req),
     }).catch(() => {});
     if (action === 'approve') {
       await notifyExtensionApproved(id, actorId!, tRows[0].extension_requested_due).catch(() => {});
@@ -1501,7 +1509,7 @@ router.post('/:id/escalate', requireAuth, async (req, res, next) => {
     await notify({
       type: 'ticket.escalated', ticketId: id, ticketTitle: tRows[0].title,
       actorId: userId, actorName: actorNameE, creatorId: tRows[0].created_by ?? undefined,
-      assigneeId: escalateToUserId, deptId: deptIdE,
+      assigneeId: escalateToUserId, deptId: deptIdE, portal: getPortal(req),
     }).catch(() => {});
     await notifyTicketEscalated(id, userId, reason?.trim()).catch(() => {});
 

@@ -112,6 +112,7 @@ export interface TicketEvent {
   deptId?:     number;
   escalatedToId?: number; // for ticket.escalated — the user being escalated to
   extra?:      string;
+  portal?:     'YPC' | 'YC'; // originating portal — used to select the correct from address
 }
 
 export interface UserEvent {

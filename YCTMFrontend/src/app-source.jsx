@@ -109,6 +109,9 @@
                 'pencil':          'M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z',
                 'filter':          'M22 3H2l8 9.46V19l4 2v-8.54z',
                 'sort':            'M3 6h18 M7 12h10 M10 18h4',
+                'truck':           'M1 3h15v13H1z M16 8h4l3 3v5h-7V8z M5.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z M18.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
+                'user-x':          'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M18 8l4 4m0-4l-4 4',
+                'chevron-up':      'M18 15l-6-6-6 6',
             }[name];
             if (!d) return null;
             return (
@@ -142,6 +145,7 @@
             'compliance':       { icon:'shield',        color:'#833089', bg:'#F5F3FF', border:'#DDD6FE' },
             'finance':          { icon:'dollar-sign',   color:'#D97706', bg:'#FFFBEB', border:'#FDE68A' },
             'general enquiry':  { icon:'help-circle',   color:'#64748B', bg:'#F8FAFC', border:'#CBD5E1' },
+            'incident':         { icon:'alert-triangle', color:'#E11D48', bg:'#FFF1F2', border:'#FECDD3' },
             'payroll':          { icon:'briefcase',     color:'#10B981', bg:'#ECFDF5', border:'#A7F3D0' },
             'facilities':       { icon:'building',      color:'#64748B', bg:'#F8FAFC', border:'#CBD5E1' },
             'maintenance':      { icon:'tool',          color:'#64748B', bg:'#F8FAFC', border:'#CBD5E1' },
@@ -187,6 +191,88 @@
                     </span>
                     {label || '—'}
                 </span>
+            );
+        }
+
+        // ── Shared: resize/compress an uploaded image file into a small square
+        // JPEG data URL (center-cropped). Used by the profile-photo upload UI
+        // on both the My Profile (Settings) page and the Staff Management edit
+        // modal. Keeping this client-side avoids needing any file-storage
+        // service — the resulting data URL (usually 15-40KB) is small enough
+        // to store directly in the users.profile_photo_url TEXT column.
+        function resizeImageToDataUrl(file, maxSize = 200, quality = 0.82) {
+            return new Promise((resolve, reject) => {
+                if (!file || !(file.type || '').startsWith('image/')) return reject(new Error('Please choose an image file.'));
+                if (file.size > 8 * 1024 * 1024) return reject(new Error('Image is too large (max 8MB).'));
+                const reader = new FileReader();
+                reader.onerror = () => reject(new Error('Could not read the selected file.'));
+                reader.onload = () => {
+                    const img = new Image();
+                    img.onerror = () => reject(new Error('Could not decode the selected image.'));
+                    img.onload = () => {
+                        const side = Math.min(img.width, img.height);
+                        const sx = (img.width - side) / 2;
+                        const sy = (img.height - side) / 2;
+                        const canvas = document.createElement('canvas');
+                        canvas.width = maxSize; canvas.height = maxSize;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, sx, sy, side, side, 0, 0, maxSize, maxSize);
+                        resolve(canvas.toDataURL('image/jpeg', quality));
+                    };
+                    img.src = reader.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // Shared circular avatar-with-upload control — shows the current photo
+        // (or initials if none), a small camera-badge button that opens a file
+        // picker, resizes/compresses the chosen image, and calls onPhotoChange
+        // with the resulting data URL (or onError with a message on failure).
+        function AvatarUpload({ name, photoUrl, size = 76, onPhotoChange, onError, disabled = false }) {
+            const fileRef = React.useRef(null);
+            const [busy, setBusy] = React.useState(false);
+            const ini = (name || '').split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() || '').join('');
+            const colors = ['#6D2773', '#0A6ABD', '#689C35', '#874E8C', '#3685C9', '#4E7528'];
+            const bg = colors[(name || '').charCodeAt(0) % colors.length] || '#6D2773';
+            const handleFile = async (e) => {
+                const file = e.target.files && e.target.files[0];
+                e.target.value = ''; // allow re-selecting the same file later
+                if (!file) return;
+                setBusy(true);
+                try {
+                    const dataUrl = await resizeImageToDataUrl(file);
+                    onPhotoChange && onPhotoChange(dataUrl);
+                } catch (err) {
+                    onError && onError(err.message || 'Could not process that image.');
+                } finally {
+                    setBusy(false);
+                }
+            };
+            return (
+                <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+                    {photoUrl ? (
+                        <img src={photoUrl} alt="" style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', display: 'block' }} />
+                    ) : (
+                        <div style={{ width: size, height: size, borderRadius: '50%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.36, fontWeight: 600, letterSpacing: '0.02em', color: 'white' }}>{ini}</div>
+                    )}
+                    {!disabled && (
+                        <button
+                            type="button"
+                            onClick={() => fileRef.current && fileRef.current.click()}
+                            title="Change photo"
+                            style={{
+                                position: 'absolute', bottom: -2, right: -2, width: 28, height: 28, borderRadius: '50%',
+                                background: '#6D2773', border: '2px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                cursor: busy ? 'default' : 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+                            }}
+                            disabled={busy}
+                        >
+                            {busy ? <Icon name='loader' size={13} color='#fff' /> : <Icon name='pencil' size={13} color='#fff' />}
+                        </button>
+                    )}
+                    <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} style={{ display: 'none' }} disabled={disabled || busy} />
+                </div>
             );
         }
 
@@ -273,11 +359,22 @@
             return sessionStorage.getItem('ms_access_token') || null;
         }
 
+        // Derive active portal from URL path (/ypc/* → 'YPC', /yc/* → 'YC')
+        function getActivePortal() {
+            const path = window.location.pathname;
+            if (path.startsWith('/ypc')) return 'YPC';
+            if (path.startsWith('/yc'))  return 'YC';
+            return null;
+        }
+
         // Build headers with Authorization: Bearer for authenticated requests
+        // Automatically includes X-Portal so the backend can pick the right email sender
         function authHeaders(extra = {}) {
-            const token = getAccessToken();
+            const token  = getAccessToken();
+            const portal = getActivePortal();
             const h = { 'Content-Type': 'application/json', ...extra };
-            if (token) h['Authorization'] = `Bearer ${token}`;
+            if (token)  h['Authorization'] = `Bearer ${token}`;
+            if (portal) h['X-Portal']      = portal;
             return h;
         }
 
@@ -377,25 +474,29 @@
         //   HR Manager             → + staff-management  (also gets manager pages)
         //   Director / Bootstrap   → all pages
         const STAFF_PAGES    = ['dashboard','create-ticket','tickets','calendar','analytics','settings'];
-        const MANAGER_PAGES  = [...STAFF_PAGES, 'org-chart','staff-performance','team-comparison','ticket-log'];
+        const MANAGER_PAGES  = [...STAFF_PAGES, 'org-chart','staff-performance','team-comparison','ticket-log','vehicle-management'];
         const HR_PAGES       = [...MANAGER_PAGES, 'staff-management'];
         const DIRECTOR_PAGES    = [...HR_PAGES, 'scheduled-reports'];
         const BOOTSTRAP_PAGES   = [...DIRECTOR_PAGES, 'email-config', 'ex-staff', 'activity-log'];
 
         function getAccessiblePages(sessionUser) {
             if (!sessionUser) return STAFF_PAGES;
-            const { isBootstrapAdmin, positionType, role } = sessionUser;
+            const { isBootstrapAdmin, positionType, role, vehicleAccess } = sessionUser;
+            // vehicle-management on top of whatever tier the user already has,
+            // if they were individually granted vehicle access in Staff Management.
+            const withVehicleOverride = (pages) =>
+                vehicleAccess && !pages.includes('vehicle-management') ? [...pages, 'vehicle-management'] : pages;
             // Bootstrap admin gets everything including email-config
             if (isBootstrapAdmin) return BOOTSTRAP_PAGES;
             // Director level: director position, or admin/super_admin role
             if (positionType === 'director'
-                || role === 'super_admin' || role === 'admin') return DIRECTOR_PAGES;
+                || role === 'super_admin' || role === 'admin') return withVehicleOverride(DIRECTOR_PAGES);
             // HR Manager: hr role
-            if (role === 'hr')                                   return HR_PAGES;
+            if (role === 'hr')                                   return withVehicleOverride(HR_PAGES);
             // Department Manager: ops/finance/strategic position, or manager role
             if (['ops','finance','strategic'].includes(positionType)
-                || role === 'manager')                           return MANAGER_PAGES;
-            return STAFF_PAGES;
+                || role === 'manager')                           return withVehicleOverride(MANAGER_PAGES);
+            return withVehicleOverride(STAFF_PAGES);
         }
 
         // Returns badge config that visually distinguishes Bootstrap Admin from Director
@@ -451,7 +552,7 @@
                 get: async () => {
                     // Cache in sessionStorage for 5 minutes — lookups are static per session
                     const CACHE_KEY = 'yc_lookups';
-                    const CACHE_TTL = 5 * 60 * 1000;
+                    const CACHE_TTL = 30 * 60 * 1000; // 30 min — lookup data is effectively static
                     try {
                         const cached = sessionStorage.getItem(CACHE_KEY);
                         if (cached) {
@@ -660,7 +761,7 @@
         // Spinning Yahweh Care logo mark — the real brand icon, used everywhere the app is loading
         function YCLoader({ size = 36 }) {
             return (
-                <div className="yc-spin" style={{display:'inline-flex',alignItems:'center',justifyContent:'center',animation:'spin 0.9s linear infinite',width:size,height:size,flexShrink:0}}>
+                <div className="yc-spin" style={{display:'inline-flex',alignItems:'center',justifyContent:'center',animation:'spin 0.9s linear infinite',width:size,height:size,flexShrink:0,willChange:'transform'}}>
                     <img src="/apple-touch-icon.png" alt="" style={{width:size,height:size,objectFit:'contain',display:'block'}}/>
                 </div>
             );
@@ -669,9 +770,22 @@
         // Full-page loading screen — white/light branded, consistent across the app
         function LoadingScreen({ message = 'Loading…' }) {
             return (
-                <div style={{minHeight:'100vh',width:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',background:'#F8FAFC',fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'}}>
-                    <YCLoader size={56} />
-                    <p style={{marginTop:16,fontSize:14,color:'#64748B',fontWeight:500}}>{message}</p>
+                <div style={{
+                    minHeight:'100vh', width:'100%', display:'flex', flexDirection:'column',
+                    alignItems:'center', justifyContent:'center',
+                    background:'linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F172A 100%)',
+                    fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+                    position:'relative', overflow:'hidden',
+                }}>
+                    {/* Purple brand glow orbs */}
+                    <div style={{position:'absolute',top:0,left:0,right:0,bottom:0,pointerEvents:'none',overflow:'hidden'}}>
+                        <div style={{position:'absolute',top:'-20%',left:'-10%',width:600,height:600,borderRadius:'50%',background:'radial-gradient(circle, rgba(109,39,115,0.12) 0%, transparent 70%)'}}/>
+                        <div style={{position:'absolute',bottom:'-20%',right:'-10%',width:500,height:500,borderRadius:'50%',background:'radial-gradient(circle, rgba(131,47,138,0.10) 0%, transparent 70%)'}}/>
+                    </div>
+                    <div style={{position:'relative',zIndex:1,display:'flex',flexDirection:'column',alignItems:'center'}}>
+                        <YCLoader size={56} />
+                        <p style={{marginTop:16,fontSize:14,color:'#94A3B8',fontWeight:500,letterSpacing:'0.01em'}}>{message}</p>
+                    </div>
                 </div>
             );
         }
@@ -816,7 +930,7 @@
                 'staff-performance':'Staff Performance','team-comparison':'Team Comparison',
                 'staff-management':'Staff Management','scheduled-reports':'Scheduled Reports',
                 'ticket-log':'Ticket Log','email-config':'Email Config','settings':'My Profile',
-                'ex-staff':'Ex-Staff','activity-log':'Activity Log',
+                'vehicle-management':'Vehicle Management','ex-staff':'Ex-Staff','activity-log':'Activity Log',
             };
 
             React.useEffect(() => {
@@ -943,9 +1057,13 @@
                                 border:`1px solid ${userMenuOpen ? '#C77DB8' : border}`,
                                 cursor:'pointer', display:'flex', alignItems:'center', gap:8, padding:'0 10px',
                             }}>
-                            <div style={{width:26,height:26,borderRadius:'50%',background:'#F97316',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:700,fontSize:11,flexShrink:0}}>
-                                {initials}
-                            </div>
+                            {currentUser?.profile_photo_url ? (
+                                <img src={currentUser.profile_photo_url} alt="" style={{width:26,height:26,borderRadius:'50%',objectFit:'cover',flexShrink:0}}/>
+                            ) : (
+                                <div style={{width:26,height:26,borderRadius:'50%',background:'#F97316',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:700,fontSize:11,flexShrink:0}}>
+                                    {initials}
+                                </div>
+                            )}
                             <span className="yc-user-label" style={{fontSize:13,fontWeight:600,color:textC,maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                                 {displayName}
                             </span>
@@ -966,9 +1084,13 @@
                                 zIndex:50, overflow:'hidden',
                             }}>
                                 <div style={{padding:'12px 16px', borderBottom:`1px solid ${border}`, display:'flex', alignItems:'center', gap:10}}>
-                                    <div style={{width:34,height:34,borderRadius:'50%',background:'#F97316',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:700,fontSize:13,flexShrink:0}}>
-                                        {initials}
-                                    </div>
+                                    {currentUser?.profile_photo_url ? (
+                                        <img src={currentUser.profile_photo_url} alt="" style={{width:34,height:34,borderRadius:'50%',objectFit:'cover',flexShrink:0}}/>
+                                    ) : (
+                                        <div style={{width:34,height:34,borderRadius:'50%',background:'#F97316',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:700,fontSize:13,flexShrink:0}}>
+                                            {initials}
+                                        </div>
+                                    )}
                                     <div style={{flex:1,minWidth:0}}>
                                         <p style={{fontSize:13, fontWeight:700, color:textC, margin:0}}>{displayName}</p>
                                         <p style={{fontSize:11, color:subC, margin:'1px 0 3px'}}>{deptLabel}</p>
@@ -1024,6 +1146,7 @@
                 { id: 'team-comparison',   label: 'Team Comparison',   icon: 'refresh-cw' },
                 { id: 'staff-management',  label: 'Staff Management',  icon: 'briefcase' },
                 { id: 'ticket-log',        label: 'Ticket Log',        icon: 'scroll-text' },
+                { id: 'vehicle-management',label: 'Vehicle Management',icon: 'truck' },
                 { id: 'scheduled-reports', label: 'Scheduled Reports', icon: 'send' },
                 { id: 'email-config',      label: 'Email Config',       icon: 'mail-cog' },
                 { id: 'ex-staff',          label: 'Ex-Staff',          icon: 'users-minus' },
@@ -1132,9 +1255,13 @@
                                 boxShadow: darkMode ? 'none' : '0 1px 2px rgba(15,23,42,0.04)',
                                 transition:'border-color 0.15s, background 0.15s',
                             }}>
-                            <div style={{width:34,height:34,borderRadius:9,background:'#6D2773',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:700,fontSize:12,flexShrink:0,letterSpacing:'0.02em'}}>
-                                {initials}
-                            </div>
+                            {currentUser?.profile_photo_url ? (
+                                <img src={currentUser.profile_photo_url} alt="" style={{width:34,height:34,borderRadius:9,objectFit:'cover',flexShrink:0}}/>
+                            ) : (
+                                <div style={{width:34,height:34,borderRadius:9,background:'#6D2773',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:700,fontSize:12,flexShrink:0,letterSpacing:'0.02em'}}>
+                                    {initials}
+                                </div>
+                            )}
                             <div style={{flex:1, minWidth:0, textAlign:'left'}}>
                                 <p style={{fontSize:13,fontWeight:700,color:logoText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',margin:0,letterSpacing:'-0.01em'}}>{displayName}</p>
                                 <p style={{fontSize:11,color:logoSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',margin:'1px 0 0',fontWeight:500}}>{deptLabel}</p>
@@ -1161,7 +1288,14 @@
 
         // ── Login Page (initial / not-yet-authenticated) ──────────────────────────
         function LoginPage({ onSignIn }) {
-            const [hovered, setHovered] = React.useState(false);
+            const [hovered,    setHovered]    = React.useState(false);
+            const [signingIn,  setSigningIn]  = React.useState(false);
+
+            const handleClick = () => {
+                if (signingIn) return;
+                setSigningIn(true);
+                onSignIn();
+            };
 
             return (
                 <div style={{
@@ -1199,28 +1333,51 @@
                         </p>
 
                         <button
-                            onClick={onSignIn}
-                            onMouseEnter={() => setHovered(true)}
+                            onClick={handleClick}
+                            disabled={signingIn}
+                            onMouseEnter={() => !signingIn && setHovered(true)}
                             onMouseLeave={() => setHovered(false)}
                             style={{
-                                width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:10,
-                                padding:'13px 0',borderRadius:12,border:'none',cursor:'pointer',
-                                background: hovered ? '#5D2162' : '#6D2773',
-                                color:'white',fontSize:14,fontWeight:700,
-                                boxShadow: hovered ? '0 4px 14px rgba(109,39,115,0.4)' : '0 2px 8px rgba(109,39,115,0.3)',
+                                width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:10,
+                                padding:'13px 0', borderRadius:12, border:'none',
+                                cursor: signingIn ? 'default' : 'pointer',
+                                background: signingIn ? '#5D2162' : hovered ? '#5D2162' : '#6D2773',
+                                color:'white', fontSize:14, fontWeight:700,
+                                boxShadow: signingIn ? '0 4px 14px rgba(109,39,115,0.25)' : hovered ? '0 4px 14px rgba(109,39,115,0.4)' : '0 2px 8px rgba(109,39,115,0.3)',
                                 transition:'all 0.2s',
+                                opacity: signingIn ? 0.85 : 1,
                             }}
                         >
-                            <svg width="18" height="18" viewBox="0 0 21 21" fill="none" style={{flexShrink:0}}>
-                                <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
-                                <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
-                                <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
-                                <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
-                            </svg>
-                            Sign in with Microsoft
+                            {signingIn ? (
+                                <>
+                                    <div style={{
+                                        width:18, height:18, borderRadius:'50%', flexShrink:0,
+                                        border:'2.5px solid rgba(255,255,255,0.35)',
+                                        borderTopColor:'#fff',
+                                        animation:'spin 0.75s linear infinite',
+                                    }}/>
+                                    Signing in…
+                                </>
+                            ) : (
+                                <>
+                                    <svg width="18" height="18" viewBox="0 0 21 21" fill="none" style={{flexShrink:0}}>
+                                        <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
+                                        <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
+                                        <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+                                        <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+                                    </svg>
+                                    Sign in with Microsoft
+                                </>
+                            )}
                         </button>
 
-                        <p style={{fontSize:11,color:'#475569',margin:'20px 0 0',lineHeight:1.5}}>
+                        {signingIn && (
+                            <p style={{fontSize:12,color:'#6D2773',margin:'14px 0 0',fontWeight:600,letterSpacing:'0.01em'}}>
+                                Redirecting to Microsoft…
+                            </p>
+                        )}
+
+                        <p style={{fontSize:11,color:'#475569',margin: signingIn ? '8px 0 0' : '20px 0 0',lineHeight:1.5}}>
                             Secure login via Microsoft Entra ID.<br/>Contact your administrator if you need access.
                         </p>
                     </div>
@@ -1302,7 +1459,14 @@
 
         // ── Branded Signed-Out / Session-Expired Screen ───────────────────────────
         function SignedOutScreen({ onSignBackIn, authError }) {
-            const [hovered, setHovered] = React.useState(false);
+            const [hovered,   setHovered]   = React.useState(false);
+            const [signingIn, setSigningIn] = React.useState(false);
+
+            const handleClick = () => {
+                if (signingIn) return;
+                setSigningIn(true);
+                onSignBackIn();
+            };
 
             return (
                 <div style={{
@@ -1363,29 +1527,52 @@
 
                         {/* Sign in button */}
                         <button
-                            onClick={onSignBackIn}
-                            onMouseEnter={() => setHovered(true)}
+                            onClick={handleClick}
+                            disabled={signingIn}
+                            onMouseEnter={() => !signingIn && setHovered(true)}
                             onMouseLeave={() => setHovered(false)}
                             style={{
                                 width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:10,
-                                padding:'13px 0', borderRadius:12, border:'none', cursor:'pointer',
-                                background: hovered ? '#5D2162' : '#6D2773',
+                                padding:'13px 0', borderRadius:12, border:'none',
+                                cursor: signingIn ? 'default' : 'pointer',
+                                background: signingIn ? '#5D2162' : hovered ? '#5D2162' : '#6D2773',
                                 color:'white', fontSize:14, fontWeight:700,
-                                boxShadow: hovered ? '0 4px 14px rgba(109,39,115,0.4)' : '0 2px 8px rgba(109,39,115,0.3)',
+                                boxShadow: signingIn ? '0 4px 14px rgba(109,39,115,0.25)' : hovered ? '0 4px 14px rgba(109,39,115,0.4)' : '0 2px 8px rgba(109,39,115,0.3)',
                                 transition:'all 0.2s',
+                                opacity: signingIn ? 0.85 : 1,
                             }}
                         >
-                            <svg width="18" height="18" viewBox="0 0 21 21" fill="none" style={{flexShrink:0}}>
-                                <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
-                                <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
-                                <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
-                                <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
-                            </svg>
-                            Sign in with Microsoft
+                            {signingIn ? (
+                                <>
+                                    <div style={{
+                                        width:18, height:18, borderRadius:'50%', flexShrink:0,
+                                        border:'2.5px solid rgba(255,255,255,0.35)',
+                                        borderTopColor:'#fff',
+                                        animation:'spin 0.75s linear infinite',
+                                    }}/>
+                                    Signing in…
+                                </>
+                            ) : (
+                                <>
+                                    <svg width="18" height="18" viewBox="0 0 21 21" fill="none" style={{flexShrink:0}}>
+                                        <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
+                                        <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
+                                        <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+                                        <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+                                    </svg>
+                                    Sign in with Microsoft
+                                </>
+                            )}
                         </button>
 
+                        {signingIn && (
+                            <p style={{fontSize:12, color:'#6D2773', margin:'14px 0 0', fontWeight:600, letterSpacing:'0.01em'}}>
+                                Redirecting to Microsoft…
+                            </p>
+                        )}
+
                         {/* Footer note */}
-                        <p style={{fontSize:11, color:'#475569', margin:'20px 0 0', lineHeight:1.5}}>
+                        <p style={{fontSize:11, color:'#475569', margin: signingIn ? '8px 0 0' : '20px 0 0', lineHeight:1.5}}>
                             Secure login via Microsoft Entra ID.<br/>Contact your administrator if you have trouble signing in.
                         </p>
                     </div>
@@ -1516,7 +1703,7 @@
         }
 
         // Dashboard Page
-        function Dashboard() {
+        const Dashboard = React.memo(function Dashboard() {
             const dm = useDark();
             const cache = useTicketCache();
             const pageBg  = dm ? 'transparent' : '#F5F7FF';
@@ -1812,7 +1999,7 @@
                         {/* Header */}
                         <div style={{marginBottom:'20px'}}>
                             <h1 style={{fontSize:'20px',fontWeight:'700',color:textP,margin:0}}>Dashboard</h1>
-                            <p style={{fontSize:'13px',color:textM,margin:'3px 0 0'}}>Yahweh Property Care — Ticket Management</p>
+                            <p style={{fontSize:'13px',color:textM,margin:'3px 0 0'}}>Yahweh Care — Ticket Management</p>
                         </div>
 
                         {/* Stat cards */}
@@ -1933,10 +2120,10 @@
                 {insight && <InsightDrawer data={insight} onClose={()=>setInsight(null)}/>}
             </>
             );
-        }
+        });
 
         // Create Ticket Page
-        function CreateTicket() {
+        const CreateTicket = React.memo(function CreateTicket() {
 
             const dm = useDark();
             const pageBg  = dm ? 'transparent' : '#F5F7FF';
@@ -1948,7 +2135,8 @@
             const sessionUser = React.useMemo(() => getSessionUser(), []);
 
             const [formData, setFormData] = React.useState({
-                title_type: 'Service Request',
+                title_type: '',
+                title_type_other: '',
                 subtitle: '',
                 category_id: '',        // populated from lookups
                 subcategory: '',
@@ -2058,6 +2246,16 @@
                 setError('');
                 setSuccess(false);
                 try {
+                    if (!formData.title_type) {
+                        setError('Please select a Title Type');
+                        setLoading(false);
+                        return;
+                    }
+                    if (formData.title_type === 'Other' && !formData.title_type_other?.trim()) {
+                        setError('Please enter a Title Type');
+                        setLoading(false);
+                        return;
+                    }
                     if (!formData.subtitle?.trim()) {
                         setError('Subtitle is required');
                         setLoading(false);
@@ -2093,12 +2291,16 @@
                         setLoading(false);
                         return;
                     }
-                    await API.tickets.create({ ...formData, attachments });
+                    const submitData = { ...formData, attachments };
+                    if (submitData.title_type === 'Other') submitData.title_type = submitData.title_type_other.trim();
+                    delete submitData.title_type_other;
+                    await API.tickets.create(submitData);
                     setSuccess(true);
                     // Scroll the page back to the top so the success banner is visible
                     document.querySelector('main.flex-1.overflow-auto')?.scrollTo({ top: 0, behavior: 'smooth' });
                     setFormData({
-                        title_type: 'Service Request',
+                        title_type: '',
+                        title_type_other: '',
                         subtitle: '',
                         category_id: '',
                         subcategory: '',
@@ -2159,6 +2361,7 @@
                     sparkles:       'Cleaning standards, hygiene, or facility presentation issues.',
                     tool:           'Equipment faults, maintenance, or asset requests.',
                     'clipboard-list':'NDIS compliance, participant plans, or regulatory requirements.',
+                    'alert-triangle':'Incidents, accidents, or unexpected events requiring formal reporting.',
                 };
                 return { ...v, label: cat.label, desc: DESC_MAP[v.icon] || '' };
             })();
@@ -2206,6 +2409,7 @@
                                             <div>
                                                 <label className={labelCls}>Title Type <span className="text-red-400">*</span></label>
                                                 <select name="title_type" value={formData.title_type} onChange={handleChange} className={inputCls}>
+                                                    <option value="">Select Title Type</option>
                                                     <option>Service Request</option>
                                                     <option>Complaint</option>
                                                     <option>Incident Report</option>
@@ -2220,6 +2424,12 @@
                                                 <label className={labelCls}>Subtitle <span className="text-red-400">*</span></label>
                                                 <input type="text" name="subtitle" value={formData.subtitle} onChange={handleChange} placeholder="Brief description" className={inputCls}/>
                                             </div>
+                                            {formData.title_type === 'Other' && (
+                                                <div style={{gridColumn:'1/-1'}}>
+                                                    <label className={labelCls}>Specify Title Type <span className="text-red-400">*</span></label>
+                                                    <input type="text" name="title_type_other" value={formData.title_type_other} onChange={handleChange} placeholder="Enter a title type" className={inputCls} autoFocus/>
+                                                </div>
+                                            )}
                                         </div>
                                         {/* Category visual picker */}
                                         <div className="mb-4">
@@ -2574,10 +2784,10 @@
                     </div>
                 </main>
             );
-        }
+        });
 
         // Tickets Page
-        function TicketsPage() {
+        const TicketsPage = React.memo(function TicketsPage() {
             const sessionUser = React.useMemo(() => getSessionUser(), []);
             const scopeParams = React.useMemo(() => getTicketScopeParams(sessionUser), []);
 
@@ -3869,7 +4079,7 @@
                     })()}
                 </main>
             );
-        }
+        });
 
         // Calendar Page
         // ── Australian Public Holidays data (2025 + 2026) ──────
@@ -3973,6 +4183,7 @@
 
         function CalendarPage() {
             const dm = useDark();
+            const cache = useTicketCache(); // shared global cache — no extra fetch needed
             const pageBg  = dm ? 'transparent' : '#F5F7FF';
             const cardBg  = dm ? 'linear-gradient(155deg,rgba(17,30,58,0.97) 0%,rgba(8,16,36,0.99) 100%)' : 'white';
             const borderC = dm ? 'rgba(109,39,115,0.16)' : '#E2E8F2';
@@ -3986,8 +4197,9 @@
             const [hoverTicket, setHoverTicket] = React.useState(null); // { ticket, x, y }
             const [dragTicket, setDragTicket]   = React.useState(null); // ticket being dragged
             const [dragOver, setDragOver]       = React.useState(null); // ds string
-            const [tickets, setTickets]   = React.useState([]);
-            const [loading, setLoading]   = React.useState(true);
+            // Use tickets from global cache — renders instantly when cache is ready
+            const [tickets, setTickets]   = React.useState(() => cache.tickets);
+            const [loading, setLoading]   = React.useState(() => !cache.ready);
             const [viewTicket, setViewTicket]   = React.useState(null); // ticket shown in quick-view modal
             const [toast, setToast]             = React.useState(null); // { msg, type }
             const [rescheduling, setRescheduling] = React.useState(false);
@@ -3999,12 +4211,13 @@
             };
             React.useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
+            // Sync with global cache updates (e.g. 60-second auto-refresh)
             React.useEffect(() => {
-                setLoading(true);
-                API.tickets.getAll({ all: '1', limit: 500 }).then(data => {
-                    setTickets(data.tickets || []);
-                }).catch(() => setTickets([])).finally(() => setLoading(false));
-            }, []);
+                if (cache.ready) {
+                    setTickets(cache.tickets);
+                    setLoading(false);
+                }
+            }, [cache.tickets, cache.ready]);
 
             // ── Helpers ──────────────────────────────────────────
             const pad     = n => String(n).padStart(2,'0');
@@ -4839,7 +5052,7 @@
         // Metrics: assigned, resolved, pending, resolution rate,
         //          avg resolution time, SLA compliance, escalations,
         //          overdue, high/critical tickets + auto insights
-        function StaffPerformancePage() {
+        const StaffPerformancePage = React.memo(function StaffPerformancePage() {
             const dm = useDark();
             const pageBg  = dm ? 'transparent' : '#F5F7FF';
             const cardBg  = dm ? 'linear-gradient(155deg,rgba(17,30,58,0.97) 0%,rgba(8,16,36,0.99) 100%)' : 'white';
@@ -4920,14 +5133,21 @@
                           .sort((a,b) => b.resolved - a.resolved);
 
                         // ── Team summary ──────────────────────────────────
-                        const totalTickets   = tickets.length;
-                        const totalResolved  = tickets.filter(isResolved).length;
-                        const totalAssigned  = tickets.filter(t => t.assigneeId).length;
-                        const totalEscalated = tickets.filter(t => t.isEscalated).length;
-                        const totalOverdue   = tickets.filter(t => !isResolved(t) && t.dueAt && new Date(t.dueAt) < now).length;
-                        const resolvedWithSla = tickets.filter(t => isResolved(t) && !t.slaBreached).length;
+                        // Derived from the same ticket set backing the per-staff table below
+                        // (tickets assigned to a currently-active, fetched staff member) so the
+                        // KPI row always reconciles with what the table actually shows. Tickets
+                        // assigned to an inactive/unfetched user are excluded from both.
+                        const includedIds = new Set(metrics.map(m => Number(m.id)));
+                        const scopedTickets = tickets.filter(t => t.assigneeId != null && includedIds.has(Number(t.assigneeId)));
+
+                        const totalTickets   = scopedTickets.length;
+                        const totalResolved  = scopedTickets.filter(isResolved).length;
+                        const totalAssigned  = totalTickets;
+                        const totalEscalated = scopedTickets.filter(t => t.isEscalated).length;
+                        const totalOverdue   = scopedTickets.filter(t => !isResolved(t) && t.dueAt && new Date(t.dueAt) < now).length;
+                        const resolvedWithSla = scopedTickets.filter(t => isResolved(t) && !t.slaBreached).length;
                         const teamSla = totalResolved > 0 ? Math.round((resolvedWithSla / totalResolved) * 100) : 0;
-                        const allDurs = tickets
+                        const allDurs = scopedTickets
                             .filter(t => isResolved(t) && t.resolvedAt && t.createdAt)
                             .map(t => (new Date(t.resolvedAt) - new Date(t.createdAt)) / 3600000);
                         const teamAvgHours = allDurs.length ? Math.round(allDurs.reduce((a,b)=>a+b,0)/allDurs.length) : null;
@@ -5038,7 +5258,7 @@
                     <div className="p-8 max-w-7xl mx-auto">
                         <div className="mb-7">
                             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Staff Performance</h1>
-                            <p className="text-sm text-gray-400 mt-1">Live metrics computed from ticket data</p>
+                            <p className="text-sm text-gray-400 mt-1">Live metrics for tickets assigned to active staff</p>
                         </div>
 
                         {loading ? (
@@ -5195,7 +5415,7 @@
                     </div>
                 </main>
             );
-        }
+        });
 
         // ── Team insight helpers ─────────────────────────────────
         const isResT = t => { const s=(t.status||'').toLowerCase(); return t.isClosed||s==='resolved'||s==='closed'; };
@@ -5239,7 +5459,7 @@
         };
 
         // Team Comparison Page
-        function TeamComparisonPage() {
+        const TeamComparisonPage = React.memo(function TeamComparisonPage() {
             const dm = useDark();
             const pageBg  = dm ? 'transparent' : '#F5F7FF';
             const cardBg  = dm ? 'linear-gradient(155deg,rgba(17,30,58,0.97) 0%,rgba(8,16,36,0.99) 100%)' : 'white';
@@ -5288,10 +5508,14 @@
                             if (!depts[d]) depts[d] = { name: d, staff: [], tickets: [] };
                             depts[d].staff.push(u);
                         });
+                        // Tickets assigned to a director or a staff member without a
+                        // department can't be attributed to a real department, but they
+                        // still represent real work — bucket them under "Other" instead of
+                        // silently dropping them, so team totals aren't undercounted.
+                        const OTHER_BUCKET = 'Other (no dept / director)';
                         tickets.forEach(t => {
                             if (!t.assigneeId) return;
-                            const d = userDept[t.assigneeId];
-                            if (!d) return;
+                            const d = userDept[t.assigneeId] || OTHER_BUCKET;
                             if (!depts[d]) depts[d] = { name: d, staff: [], tickets: [] };
                             depts[d].tickets.push(t);
                         });
@@ -5683,10 +5907,10 @@
                     </div>
                 </main>
             );
-        }
+        });
 
         // Analytics Page
-        function AnalyticsPage() {
+        const AnalyticsPage = React.memo(function AnalyticsPage() {
 
             const dm = useDark();
             const cache = useTicketCache();
@@ -6136,7 +6360,7 @@
                 </main>
                 <InsightDrawer data={insight} onClose={()=>setInsight(null)}/>
             </>);
-        }
+        });
 
         // Org Chart Page
         // ── Org Chart helpers (defined outside to keep stable references) ──
@@ -6368,7 +6592,7 @@
             );
         }
 
-        function OrgChartPage() {
+        const OrgChartPage = React.memo(function OrgChartPage() {
 
             const dm = useDark();
             const pageBg  = dm ? 'transparent' : '#F5F7FF';
@@ -6688,18 +6912,19 @@
                     </div>
                 </main>
             );
-        }
+        });
 
         // ============================================================
         // STAFF MANAGEMENT PAGE
         // ============================================================
-        function StaffManagementPage() {
+        const StaffManagementPage = React.memo(function StaffManagementPage() {
             const EMP_TYPES = { full_time:'Full Time', part_time:'Part Time', casual:'Casual', contractor:'Contractor' };
             const POS_TYPES  = ['director','ops','finance','strategic','staff','external'];
             const EMPTY_FORM = {
                 name:'', email:'', phone:'', address:'', employment_type:'full_time',
                 department_id:'', manager_id:'', start_date:'',
-                profile_notes:'', position_ids:[], auth_provider:'azure_ad'
+                profile_notes:'', position_ids:[], auth_provider:'azure_ad',
+                profile_photo_url:'', vehicle_access:false
             };
 
 
@@ -6783,7 +7008,9 @@
                     start_date: m.start_date ? m.start_date.slice(0,10) : '',
                     profile_notes: m.profile_notes||'',
                     position_ids: (m.positions||[]).map(p=>p.id),
-                    auth_provider: m.auth_provider||'azure_ad'
+                    auth_provider: m.auth_provider||'azure_ad',
+                    profile_photo_url: m.profile_photo_url||'',
+                    vehicle_access: m.vehicle_access===true
                 });
                 setSelStaff(m); setModalMode('edit'); setError(''); setShowModal(true);
             };
@@ -6812,6 +7039,8 @@
                         position_ids:    form.position_ids || [],
                         auth_provider:   form.auth_provider   || 'azure_ad',
                         is_active:       true,
+                        profile_photo_url: form.profile_photo_url || null,
+                        vehicle_access:  form.vehicle_access === true,
                     };
                     const url    = modalMode==='add' ? `${HRMS_API}/users` : `${HRMS_API}/users/${selStaff.id}`;
                     const method = modalMode==='add' ? 'POST' : 'PATCH';
@@ -6885,10 +7114,11 @@
 
             const posTypeColor = { director:'#6D2773', ops:'#0A6ABD', finance:'#5B892E', strategic:'#874E8C', staff:'#3685C9', external:'#99CE64' };
 
-            const Avatar = ({name, size=36}) => {
+            const Avatar = ({name, photoUrl, size=36}) => {
                 const ini=(name||'').split(' ').slice(0,2).map(w=>w[0]?.toUpperCase()||'').join('');
                 const colors=['#6D2773','#0A6ABD','#689C35','#874E8C','#3685C9','#4E7528'];
                 const bg=colors[(name||'').charCodeAt(0)%colors.length];
+                if (photoUrl) return <img src={photoUrl} alt="" style={{width:size,height:size,borderRadius:'50%',objectFit:'cover',flexShrink:0}}/>;
                 return <div style={{width:size,height:size,borderRadius:'50%',background:bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:size*0.36,fontWeight:600,letterSpacing:'0.02em',color:'white',flexShrink:0}}>{ini}</div>;
             };
 
@@ -6970,7 +7200,7 @@
                                             <tr key={m.id} style={{borderBottom:`1px solid ${borderC}`}} className="table-row">
                                                 <td style={{padding:'12px 14px'}}>
                                                     <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
-                                                        <Avatar name={m.name} size={34}/>
+                                                        <Avatar name={m.name} photoUrl={m.profile_photo_url} size={34}/>
                                                         <div>
                                                             <div style={{fontSize:'13px',fontWeight:'700',color:textP,display:'flex',alignItems:'center',gap:'6px',flexWrap:'wrap'}}>
                                                                 {m.name}
@@ -6984,6 +7214,12 @@
                                                                     <span title="Organisational Leadership — part of org hierarchy" style={{display:'inline-flex',alignItems:'stretch',borderRadius:'6px',overflow:'hidden',fontSize:'9px',fontWeight:'600',border:`1px solid ${dm?'rgba(109,39,115,0.35)':'#DBC9DC'}`}}>
                                                                         <span style={{background:'#6D2773',color:'#fff',padding:'2px 5px',display:'flex',alignItems:'center'}}><Icon name='building-2' size={9} color='#fff' /></span>
                                                                         <span style={{background:dm?'rgba(109,39,115,0.16)':'#F0E9F1',color:dm?'#A073A4':'#521D56',padding:'2px 7px'}}>Director</span>
+                                                                    </span>
+                                                                )}
+                                                                {!m.is_bootstrap_admin && m.vehicle_access && (
+                                                                    <span title="Individually granted access to Vehicle Management" style={{display:'inline-flex',alignItems:'stretch',borderRadius:'6px',overflow:'hidden',fontSize:'9px',fontWeight:'600',border:'1px solid #A9CFA0'}}>
+                                                                        <span style={{background:'#5F8F6E',color:'#fff',padding:'2px 5px',display:'flex',alignItems:'center'}}><Icon name='truck' size={9} color='#fff' /></span>
+                                                                        <span style={{background:dm?'rgba(95,143,110,0.16)':'#EAF4EC',color:dm?'#8FD3A3':'#2F5E3F',padding:'2px 7px'}}>Vehicle Access</span>
                                                                     </span>
                                                                 )}
                                                             </div>
@@ -7103,6 +7339,17 @@
                                 <div style={{padding:'20px 24px'}}>
                                     {error && <div style={{background:dm?'rgba(239,68,68,0.12)':'#FEF2F2',border:`1px solid ${dm?'rgba(239,68,68,0.3)':'#FECACA'}`,borderRadius:'8px',padding:'8px 12px',marginBottom:'14px',fontSize:'12px',color:'#DC2626',display:'flex',alignItems:'center',gap:'6px'}}><Icon name='alert-triangle' size={12} color='#DC2626' />{error}</div>}
 
+                                    {/* Profile photo */}
+                                    <div style={{display:'flex',justifyContent:'center',marginBottom:'18px'}}>
+                                        <AvatarUpload
+                                            name={form.name}
+                                            photoUrl={form.profile_photo_url}
+                                            size={76}
+                                            onPhotoChange={(dataUrl)=>setForm(f=>({...f, profile_photo_url:dataUrl}))}
+                                            onError={(msg)=>setError(msg)}
+                                        />
+                                    </div>
+
                                     {/* Login method notice */}
                                     <div style={{background:dm?'rgba(59,130,246,0.08)':'#EFF6FF',border:`1px solid ${dm?'rgba(59,130,246,0.25)':'#BFDBFE'}`,borderRadius:'8px',padding:'10px 14px',marginBottom:'16px',fontSize:'12px',color:dm?'#93c5fd':'#1E40AF'}}>
                                         <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'4px'}}>
@@ -7184,6 +7431,18 @@
                                             )}
                                         </div>
                                     </div>
+                                </div>
+
+                                {/* Vehicle Management access override */}
+                                <div style={{padding:'0 24px 16px'}}>
+                                    <label style={{display:'flex',alignItems:'center',gap:'10px',cursor:'pointer',border:`1.5px solid ${form.vehicle_access ? BRAND : borderC}`,borderRadius:'8px',padding:'10px 12px',background:form.vehicle_access ? `${BRAND}10` : 'transparent'}}>
+                                        <input type="checkbox" checked={form.vehicle_access} onChange={e=>setForm(f=>({...f,vehicle_access:e.target.checked}))}/>
+                                        <Icon name='truck' size={15} color={form.vehicle_access ? BRAND : textM} />
+                                        <div>
+                                            <div style={{fontSize:'12.5px',fontWeight:'600',color:textP}}>Vehicle Management Access</div>
+                                            <div style={{fontSize:'11px',color:textM}}>Grant access to Vehicle Management regardless of role</div>
+                                        </div>
+                                    </label>
                                 </div>
 
                                 {/* Modal footer */}
@@ -7309,10 +7568,10 @@
                     )}
                 </main>
             );
-        }
+        });
 
         // ── Ticket Log Page ───────────────────────────────────────────────────────
-        function TicketLogPage() {
+        const TicketLogPage = React.memo(function TicketLogPage() {
             const dm = useDark();
             const sessionUser = React.useMemo(() => getSessionUser(), []);
 
@@ -7804,10 +8063,10 @@
                     </div>
                 </main>
             );
-        }
+        });
 
         // Scheduled Reports Page
-        function ScheduledReportsPage() {
+        const ScheduledReportsPage = React.memo(function ScheduledReportsPage() {
             const dm = useDark();
             const pageBg  = dm ? 'transparent' : '#F5F7FF';
             const cardBg  = dm ? 'linear-gradient(155deg,rgba(17,30,58,0.97) 0%,rgba(8,16,36,0.99) 100%)' : 'white';
@@ -8511,10 +8770,10 @@
                     )}
                 </main>
             );
-        }
+        });
         // ── Email Config Page (Bootstrap Admin only) ──────────────────────────────
         // ── SettingsPage — "My Profile": view own details, edit phone + address only ──
-        function SettingsPage() {
+        const SettingsPage = React.memo(function SettingsPage() {
             const dm = React.useContext(DarkModeContext);
             const [profile, setProfile]   = React.useState(null);
             const [loading, setLoading]   = React.useState(true);
@@ -8557,6 +8816,15 @@
                 finally { setSaving(false); }
             };
 
+            const handlePhotoChange = async (dataUrl) => {
+                try {
+                    const d = await API.users.me.update({ profile_photo_url: dataUrl });
+                    setProfile(p => ({ ...p, ...d.user }));
+                    try { window.dispatchEvent(new CustomEvent('yc:profile-updated', { detail: { profile_photo_url: d.user?.profile_photo_url ?? dataUrl } })); } catch(e) {}
+                    showToast('Profile photo updated');
+                } catch (e) { showToast('Failed to update photo: ' + e.message); }
+            };
+
             const initials = (profile?.name || '').split(/\s+/).map(w => w[0] || '').slice(0, 2).join('').toUpperCase();
 
             const fieldRow = (label, value) => (
@@ -8593,9 +8861,13 @@
                         {!loading && !loadError && profile && (
                             <>
                                 <div style={{background:card,border:`1px solid ${bdr}`,borderRadius:12,padding:20,marginBottom:20,display:'flex',alignItems:'center',gap:14}}>
-                                    <div style={{width:52,height:52,borderRadius:'50%',background:'#F97316',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:700,fontSize:18,flexShrink:0}}>
-                                        {initials || '?'}
-                                    </div>
+                                    <AvatarUpload
+                                        name={profile.name}
+                                        photoUrl={profile.profile_photo_url}
+                                        size={52}
+                                        onPhotoChange={handlePhotoChange}
+                                        onError={(msg)=>showToast(msg)}
+                                    />
                                     <div>
                                         <p style={{fontSize:16,fontWeight:700,color:txt,margin:0}}>{profile.name}</p>
                                         <p style={{fontSize:12,color:muted,margin:'2px 0 0'}}>{profile.email}</p>
@@ -8642,9 +8914,9 @@
                     </div>
                 </main>
             );
-        }
+        });
 
-        function EmailConfigPage() {
+        const EmailConfigPage = React.memo(function EmailConfigPage() {
             const dm = React.useContext(DarkModeContext);
             const BACKEND = window.location.hostname === 'localhost' ? 'http://localhost:4001' : 'https://yahweahcare-tkt-mgmt-hx48.vercel.app';
 
@@ -8942,7 +9214,1042 @@
                     </div>
                 </main>
             );
+        });
+
+        // ============================================================
+        // VEHICLE MANAGEMENT PAGE
+        // ============================================================
+        const VEHICLE_BRAND_DOMAINS = {
+            'Toyota':       'toyota.com',
+            'Ford':         'ford.com',
+            'Tesla':        'tesla.com',
+            'LDV':          'ldvmotors.com',
+            'Honda':        'honda.com',
+            'Hyundai':      'hyundai.com',
+            'Kia':          'kia.com',
+            'Nissan':       'nissan.com',
+            'Mazda':        'mazda.com',
+            'Mitsubishi':   'mitsubishi-motors.com',
+            'Subaru':       'subaru.com',
+            'Volkswagen':   'vw.com',
+            'BMW':          'bmw.com',
+            'Mercedes':     'mercedes-benz.com',
+            'Mercedes-Benz':'mercedes-benz.com',
+            'Audi':         'audi.com',
+            'Isuzu':        'isuzu.com',
+            'Holden':       'holden.com.au',
+            'Jeep':         'jeep.com',
+            'Land Rover':   'landrover.com',
+            'Volvo':        'volvocars.com',
+            'Dodge':        'dodge.com',
+            'Chevrolet':    'chevrolet.com',
+            'Ram':          'ramtrucks.com',
+            'Renault':      'renault.com',
+            'Peugeot':      'peugeot.com',
+            'Fiat':         'fiat.com',
+            'Alfa Romeo':   'alfaromeo.com',
+            'Porsche':      'porsche.com',
+            'Lexus':        'lexus.com',
+            'Infiniti':     'infiniti.com',
+            'Acura':        'acura.com',
+            'Cadillac':     'cadillac.com',
+            'Lincoln':      'lincoln.com',
+            'Mini':         'mini.com',
+            'BYD':          'byd.com',
+            'MG':           'mgmotor.com.au',
+            'GWM':          'gwm.com.au',
+            'Haval':        'haval.com.au',
+            'Chery':        'cheryinternational.com',
+            'Geely':        'geely.com',
+            'Great Wall':   'gwm.com.au',
+            'Suzuki':       'suzuki.com',
+            'Daihatsu':     'daihatsu.com',
+            'Skoda':        'skoda-auto.com',
+            'Seat':         'seat.com',
+            'Jaguar':       'jaguar.com',
+            'Bentley':      'bentleymotors.com',
+            'Rolls-Royce':  'rolls-roycemotorcars.com',
+            'Ferrari':      'ferrari.com',
+            'Lamborghini':  'lamborghini.com',
+            'Maserati':     'maserati.com',
+            'McLaren':      'mclaren.com',
+            'Bugatti':      'bugatti.com',
+            'Rivian':       'rivian.com',
+            'Lucid':        'lucidmotors.com',
+            'Polestar':     'polestar.com',
+        };
+
+        // Defined OUTSIDE VehicleManagementPage so it's a stable reference (avoids remount on re-render)
+        // Uses Google S2 favicon service — reliable, free, no API key, works for any domain.
+        // Falls back to truck icon if the logo cannot be resolved.
+        function VehicleBrandIcon({ make, size = 22, iconColor }) {
+            const [failed, setFailed] = React.useState(false);
+            const fallbackColor = iconColor || '#1B75BB';
+
+            const domain = React.useMemo(() => {
+                if (!make) return null;
+                const m = make.trim();
+                // Curated map for accuracy; unknown/future brands auto-try {slug}.com
+                return VEHICLE_BRAND_DOMAINS[m] || `${m.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`;
+            }, [make]);
+
+            if (failed || !domain) {
+                return <Icon name='truck' size={size - 4} color={fallbackColor} />;
+            }
+
+            // Google S2 favicon service — sz=64 gives sharp 48×48 px image, no CORS issues
+            return (
+                <img
+                    src={`https://www.google.com/s2/favicons?domain=${domain}&sz=64`}
+                    alt={make || 'Vehicle'}
+                    width={size}
+                    height={size}
+                    style={{ objectFit: 'contain', display: 'block', borderRadius: '2px' }}
+                    onError={() => setFailed(true)}
+                />
+            );
         }
+
+        const VehicleManagementPage = React.memo(function VehicleManagementPage() {
+            const STATUS_LABELS = { active: 'Active', in_service: 'In Service', retired: 'Retired' };
+            const STATUS_COLORS = { active: '#5F8F6E', in_service: '#B08D3F', retired: '#8B93A1' };
+            const COMPANY_LABELS = { YC: 'Yahweh Care (YC)', YPC: 'Yahweh Property Care (YPC)' };
+            const ALERT_GROUPS = [
+                { type: 'rego_expiry',    label: 'Registration Expiry',        color: '#3B82F6', icon: 'calendar',      desc: 'Remind staff when vehicle registrations are approaching expiry' },
+                { type: 'comp_insurance', label: 'Comprehensive Insurance',    color: '#8B5CF6', icon: 'shield',        desc: 'Remind staff when comprehensive insurance policies are due to expire' },
+                { type: 'ctp_expiry',     label: 'CTP / Green Slip',           color: '#10B981', icon: 'check-circle',  desc: 'Remind staff when CTP/Green Slip policies are due to expire' },
+                { type: 'service_due',    label: 'Service Reminders',          color: '#F59E0B', icon: 'wrench',        desc: 'Remind staff when vehicle services are coming due' },
+                { type: 'event',          label: 'Event Notifications',        color: '#EF4444', icon: 'bell',          desc: 'Instant alerts when vehicle status or assignments change' },
+            ];
+            const EMPTY_FORM = {
+                registration_number: '', make: '', model: '', year: '', color: '', company: '', assigned_to: '',
+                assigned_to_external: '', assignee_type: 'staff',
+                status: 'active', registration_expiry: '',
+                comprehensive_insurer: '', insurance_expiry: '',
+                ctp_insurer: '', ctp_expiry: '',
+                next_service_due: '', notes: '',
+            };
+
+            const dm = useDark();
+            const pageBg  = dm ? '#0F172A' : '#F9FAFB';
+            const cardBg  = dm ? '#1E293B' : '#FFFFFF';
+            const borderC = dm ? '#334155' : '#E2E8F0';
+            const textP   = dm ? '#E2E8F0' : '#1E293B';
+            const textM   = dm ? '#94A3B8' : '#6B7280';
+            const BRAND   = '#6D2773';
+
+            const [activeTab,    setActiveTab]    = React.useState('fleet');
+            const [vehicles,     setVehicles]     = React.useState([]);
+            const [staffList,    setStaffList]    = React.useState([]);
+            const [loading,      setLoading]      = React.useState(true);
+            const [search,       setSearch]       = React.useState('');
+            const debouncedSearch = useDebounce(search, 150);
+            const [statusFilter, setStatusFilter] = React.useState('all');
+            const [companyFilter, setCompanyFilter] = React.useState('all');
+            const [fleetPage,    setFleetPage]    = React.useState(1);
+            const [fleetPageSize, setFleetPageSize] = React.useState(10);
+            const [showModal,    setShowModal]    = React.useState(false);
+            const [modalMode,    setModalMode]    = React.useState('add');
+            const [selVehicle,   setSelVehicle]   = React.useState(null);
+            const [delConfirm,   setDelConfirm]   = React.useState(null);
+            const [saving,       setSaving]       = React.useState(false);
+            const [error,        setError]        = React.useState('');
+            const [toast,        setToast]        = React.useState(null);
+            const [form,         setForm]         = React.useState(EMPTY_FORM);
+            // Alerts tab state
+            const [alertConfigs,  setAlertConfigs]  = React.useState([]);
+            const [alertSaving,   setAlertSaving]   = React.useState({});
+            const [alertTesting,  setAlertTesting]  = React.useState({});
+            const [expandedAlert, setExpandedAlert] = React.useState(null);
+            // Analytics tab refs
+            const makeChartRef    = React.useRef(null);
+            const ageChartRef     = React.useRef(null);
+            const statusChartRef  = React.useRef(null);
+            const makeChartInst   = React.useRef(null);
+            const ageChartInst    = React.useRef(null);
+            const statusChartInst = React.useRef(null);
+
+            const showToast = (message, tone='success') => { setToast({message, tone}); setTimeout(()=>setToast(null),3000); };
+
+            const fetchAll = React.useCallback(async () => {
+                setLoading(true);
+                try {
+                    const [vR, sR] = await Promise.all([
+                        fetch(`${HRMS_API}/vehicles`, { credentials:'include', headers: authHeaders() }),
+                        fetch(`${HRMS_API}/users?limit=200&status=active`, { credentials:'include', headers: authHeaders() }),
+                    ]);
+                    const [vd, sd] = await Promise.all([vR.json(), sR.json()]);
+                    if (!vR.ok) throw new Error(vd.message || vd.error || 'Failed to load vehicles');
+                    setVehicles(vd.vehicles || []);
+                    setStaffList(sd.users || sd.staff || []);
+                } catch(e) { setError('Failed to load fleet data: ' + e.message); }
+                finally { setLoading(false); }
+            }, []);
+
+            const fetchAlertConfigs = React.useCallback(async () => {
+                try {
+                    const res = await authFetch(`${HRMS_API}/vehicles/alert-settings`);
+                    if (res.ok) { const d = await res.json(); setAlertConfigs(d.configs || []); }
+                } catch(e) {}
+            }, []);
+
+            React.useEffect(() => { fetchAll(); fetchAlertConfigs(); }, [fetchAll, fetchAlertConfigs]);
+
+            const filtered = React.useMemo(() => {
+                const q = debouncedSearch.toLowerCase();
+                return vehicles.filter(v =>
+                    (!q || v.registration_number?.toLowerCase().includes(q) || v.make?.toLowerCase().includes(q) || v.model?.toLowerCase().includes(q) || v.color?.toLowerCase().includes(q) || v.assigned_to_name?.toLowerCase().includes(q)) &&
+                    (statusFilter==='all' || v.status===statusFilter) &&
+                    (companyFilter==='all' || v.company===companyFilter)
+                );
+            }, [vehicles, debouncedSearch, statusFilter, companyFilter]);
+
+            // Reset to page 1 when filters/search change
+            React.useEffect(() => { setFleetPage(1); }, [debouncedSearch, statusFilter, companyFilter]);
+
+            const fleetTotalPages = Math.max(1, Math.ceil(filtered.length / fleetPageSize));
+            const fleetSafePage   = Math.min(fleetPage, fleetTotalPages);
+            const pagedVehicles   = filtered.slice((fleetSafePage - 1) * fleetPageSize, fleetSafePage * fleetPageSize);
+
+            const openAdd = () => { setForm(EMPTY_FORM); setModalMode('add'); setSelVehicle(null); setError(''); setShowModal(true); };
+            const openEdit = (v) => {
+                setForm({
+                    registration_number: v.registration_number || '', make: v.make || '', model: v.model || '',
+                    year: v.year || '', color: v.color || '', company: v.company || '',
+                    assigned_to: v.assigned_to || '',
+                    assigned_to_external: v.assigned_to_external || '',
+                    assignee_type: v.assigned_to_external ? 'external' : 'staff',
+                    status: v.status || 'active',
+                    registration_expiry: v.registration_expiry ? v.registration_expiry.slice(0,10) : '',
+                    comprehensive_insurer: v.comprehensive_insurer || '',
+                    insurance_expiry: v.insurance_expiry ? v.insurance_expiry.slice(0,10) : '',
+                    ctp_insurer: v.ctp_insurer || '',
+                    ctp_expiry: v.ctp_expiry ? v.ctp_expiry.slice(0,10) : '',
+                    next_service_due: v.next_service_due ? v.next_service_due.slice(0,10) : '',
+                    notes: v.notes || '',
+                });
+                setSelVehicle(v); setModalMode('edit'); setError(''); setShowModal(true);
+            };
+
+            const handleSave = async () => {
+                if (!form.registration_number.trim()) return setError('Registration number is required');
+                if (!form.make.trim())  return setError('Make is required');
+                if (!form.model.trim()) return setError('Model is required');
+                setSaving(true); setError('');
+                try {
+                    const payload = {
+                        registration_number: form.registration_number.trim(),
+                        make: form.make.trim(),
+                        model: form.model.trim(),
+                        year: form.year || null,
+                        color: form.color || null,
+                        company: form.company || null,
+                        assigned_to: form.assignee_type === 'staff' ? (form.assigned_to || null) : null,
+                        assigned_to_external: form.assignee_type === 'external' ? (form.assigned_to_external.trim() || null) : null,
+                        status: form.status || 'active',
+                        registration_expiry: form.registration_expiry || null,
+                        comprehensive_insurer: form.comprehensive_insurer || null,
+                        insurance_expiry: form.insurance_expiry || null,
+                        ctp_insurer: form.ctp_insurer || null,
+                        ctp_expiry: form.ctp_expiry || null,
+                        next_service_due: form.next_service_due || null,
+                        notes: form.notes || null,
+                    };
+                    const url    = modalMode==='add' ? `${HRMS_API}/vehicles` : `${HRMS_API}/vehicles/${selVehicle.id}`;
+                    const method = modalMode==='add' ? 'POST' : 'PATCH';
+                    const res = await authFetch(url, { method, body:JSON.stringify(payload) });
+                    if (!res.ok) {
+                        const e = await res.json().catch(()=>({}));
+                        if (res.status === 401) throw new Error('Session expired — please sign out and sign back in.');
+                        throw new Error(e.message || e.error || 'Save failed');
+                    }
+                    setShowModal(false);
+                    showToast(modalMode==='add' ? 'Vehicle added to fleet' : 'Vehicle updated');
+                    fetchAll();
+                } catch(e) { setError(e.message); }
+                finally { setSaving(false); }
+            };
+
+            const handleDelete = async () => {
+                if (!delConfirm) return;
+                try {
+                    const res  = await authFetch(`${HRMS_API}/vehicles/${delConfirm.id}`, { method:'DELETE' });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.message || data.error || 'Delete failed');
+                    setDelConfirm(null);
+                    showToast(data.message || 'Vehicle removed from fleet');
+                    fetchAll();
+                } catch(e) { setError(e.message); }
+            };
+
+            // ── Alert helpers ─────────────────────────────────────────────────────────
+            const updateAlertConfig = async (key, patch) => {
+                setAlertSaving(s => ({...s, [key]: true}));
+                try {
+                    const res = await authFetch(`${HRMS_API}/vehicles/alert-settings/${key}`, {
+                        method: 'PUT', body: JSON.stringify(patch),
+                    });
+                    if (res.ok) {
+                        const d = await res.json();
+                        setAlertConfigs(cs => cs.map(c => c.alert_key === key ? {...c, ...d.config} : c));
+                        showToast('Alert settings saved');
+                    } else { showToast('Failed to save alert', 'error'); }
+                } catch(e) { showToast('Failed to save alert', 'error'); }
+                finally { setAlertSaving(s => ({...s, [key]: false})); }
+            };
+
+            const testAlert = async (key) => {
+                setAlertTesting(s => ({...s, [key]: true}));
+                try {
+                    const res = await authFetch(`${HRMS_API}/vehicles/alert-settings/${key}/test`, { method: 'POST' });
+                    const d = await res.json();
+                    showToast(res.ok ? (d.message || 'Test sent') : 'Test failed', res.ok ? 'success' : 'error');
+                } catch(e) { showToast('Test failed', 'error'); }
+                finally { setAlertTesting(s => ({...s, [key]: false})); }
+            };
+
+            const toggleAlertRecipient = (key, userId, checked) => {
+                const cfg = alertConfigs.find(c => c.alert_key === key);
+                if (!cfg) return;
+                const current = Array.isArray(cfg.recipient_user_ids) ? cfg.recipient_user_ids : [];
+                const next = checked ? [...new Set([...current, userId])] : current.filter(id => id !== userId);
+                updateAlertConfig(key, { recipient_user_ids: next });
+            };
+
+            // ── Analytics: Chart.js charts ────────────────────────────────────────────
+            React.useEffect(() => {
+                if (activeTab !== 'analytics' || vehicles.length === 0) return;
+                loadChartJs().then(() => {
+                    const gridC = dm ? 'rgba(27,117,187,0.08)' : '#F3F4F6';
+                    const tickC = dm ? '#4a607f' : '#94A3B8';
+
+                    // Make distribution chart
+                    if (makeChartRef.current) {
+                        if (makeChartInst.current) makeChartInst.current.destroy();
+                        const makeCounts = {};
+                        vehicles.forEach(v => { if (v.make) makeCounts[v.make] = (makeCounts[v.make]||0)+1; });
+                        const sorted = Object.entries(makeCounts).sort((a,b)=>b[1]-a[1]);
+                        const PALETTE = ['#1B75BB','#5F8F6E','#B08D3F','#8B5CF6','#EF4444','#10B981','#F59E0B','#3B82F6'];
+                        makeChartInst.current = new Chart(makeChartRef.current, {
+                            type: 'bar',
+                            data: {
+                                labels: sorted.map(([k])=>k),
+                                datasets: [{ label: 'Vehicles', data: sorted.map(([,v])=>v), backgroundColor: sorted.map((_,i)=>PALETTE[i%PALETTE.length]), borderRadius: 6, borderSkipped: false }],
+                            },
+                            options: { indexAxis:'y', responsive:true, plugins:{legend:{display:false}}, scales:{ x:{beginAtZero:true,grid:{color:gridC},ticks:{stepSize:1,color:tickC}}, y:{grid:{display:false},ticks:{color:dm?'#8fa4cc':'#334155'}} } },
+                        });
+                    }
+
+                    // Status doughnut
+                    if (statusChartRef.current) {
+                        if (statusChartInst.current) statusChartInst.current.destroy();
+                        const active = vehicles.filter(v=>v.status==='active').length;
+                        const inSvc  = vehicles.filter(v=>v.status==='in_service').length;
+                        const retired= vehicles.filter(v=>v.status==='retired').length;
+                        statusChartInst.current = new Chart(statusChartRef.current, {
+                            type: 'doughnut',
+                            data: { labels:['Active','In Service','Retired'], datasets:[{ data:[active,inSvc,retired], backgroundColor:['#5F8F6E','#B08D3F','#8B93A1'], borderWidth:2, borderColor: dm?'#1E293B':'#fff', hoverOffset:6 }] },
+                            options: { responsive:true, cutout:'68%', plugins:{ legend:{ position:'bottom', labels:{ boxWidth:10, padding:12, font:{size:11}, color: dm?'#8fa4cc':'#334155' } } } },
+                        });
+                    }
+
+                    // Fleet age bar chart
+                    if (ageChartRef.current) {
+                        if (ageChartInst.current) ageChartInst.current.destroy();
+                        const yr = new Date().getFullYear();
+                        const ageBuckets = {'0–2 yrs':0,'3–5 yrs':0,'6–9 yrs':0,'10+ yrs':0};
+                        vehicles.forEach(v => {
+                            if (!v.year) return;
+                            const age = yr - v.year;
+                            if (age <= 2) ageBuckets['0–2 yrs']++;
+                            else if (age <= 5) ageBuckets['3–5 yrs']++;
+                            else if (age <= 9) ageBuckets['6–9 yrs']++;
+                            else ageBuckets['10+ yrs']++;
+                        });
+                        ageChartInst.current = new Chart(ageChartRef.current, {
+                            type: 'bar',
+                            data: { labels: Object.keys(ageBuckets), datasets:[{ label:'Vehicles', data:Object.values(ageBuckets), backgroundColor:['#1B75BB','#5F8F6E','#B08D3F','#EF4444'], borderRadius:8, borderSkipped:false }] },
+                            options: { responsive:true, plugins:{legend:{display:false}}, scales:{ y:{beginAtZero:true,grid:{color:gridC},ticks:{stepSize:1,color:tickC}}, x:{grid:{display:false},ticks:{color:dm?'#8fa4cc':'#334155'}} } },
+                        });
+                    }
+                });
+                return () => {
+                    if (makeChartInst.current)   { makeChartInst.current.destroy();   makeChartInst.current   = null; }
+                    if (statusChartInst.current) { statusChartInst.current.destroy(); statusChartInst.current = null; }
+                    if (ageChartInst.current)    { ageChartInst.current.destroy();    ageChartInst.current    = null; }
+                };
+            }, [activeTab, vehicles, dm]);
+
+            // Returns { label, color } if a date is within `withinDays` or already past, else null
+            const expiryFlag = (dateStr, withinDays=30) => {
+                if (!dateStr) return null;
+                const d = new Date(dateStr);
+                const diffDays = Math.ceil((d.getTime() - Date.now()) / 86400000);
+                if (diffDays < 0) return { label: 'Overdue', color: '#DC2626' };
+                if (diffDays <= withinDays) return { label: `${diffDays}d left`, color: '#B45309' };
+                return null;
+            };
+
+            const expiringSoonCount = React.useMemo(() => vehicles.filter(v =>
+                expiryFlag(v.registration_expiry) || expiryFlag(v.insurance_expiry) || expiryFlag(v.ctp_expiry) || expiryFlag(v.next_service_due)
+            ).length, [vehicles]);
+
+            const inputStyle = { width:'100%', padding:'8px 10px', border:`1px solid ${borderC}`, borderRadius:'6px', fontSize:'13px', boxSizing:'border-box', background:cardBg, color:textP };
+            const labelStyle = { fontSize:'12px', fontWeight:'600', color:dm?'#c0cfec':'#334155', marginBottom:'4px', display:'block' };
+
+            const DateCell = ({ value, insurer }) => {
+                const flag = expiryFlag(value);
+                if (!value) return <span style={{fontSize:'12px',color:dm?'#4a607f':'#94A3B8'}}>—</span>;
+                return (
+                    <div>
+                        <div style={{fontSize:'12px',color:dm?'#c0cfec':'#334155'}}>{new Date(value).toLocaleDateString('en-AU',{day:'2-digit',month:'short',year:'numeric'})}</div>
+                        {insurer && <div style={{fontSize:'10px',color:textM}}>{insurer}</div>}
+                        {flag && <div style={{fontSize:'10px',fontWeight:'700',color:flag.color}}>{flag.label}</div>}
+                    </div>
+                );
+            };
+
+            return (
+                <main className="flex-1 overflow-auto" style={{background:pageBg}}>
+                    {/* Toast */}
+                    {toast && (
+                        <div style={{position:'fixed',top:20,right:20,zIndex:9999,background:dm?'#1E293B':'#0F172A',color:'#fff',padding:'10px 18px',borderRadius:'10px',fontSize:'13px',fontWeight:'600',boxShadow:'0 4px 16px rgba(0,0,0,0.25)',display:'flex',alignItems:'center',gap:'8px'}}>
+                            <Icon name={toast.tone==='error'?'alert-triangle':'check-circle'} size={15} color={toast.tone==='error'?'#F87171':'#34D399'} />
+                            {toast.message}
+                        </div>
+                    )}
+
+                    <div style={{padding:'24px 28px'}}>
+                        {/* Header */}
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'16px'}}>
+                            <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
+                                <div style={{width:'40px',height:'40px',borderRadius:'10px',background:BRAND,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:`0 3px 10px ${BRAND}55`}}>
+                                    <Icon name='truck' size={19} color='#fff' />
+                                </div>
+                                <div>
+                                    <h1 style={{fontSize:'22px',fontWeight:'700',color:textP,margin:0}}>Vehicle Management</h1>
+                                    <p style={{fontSize:'12px',color:textM,margin:'2px 0 0'}}>Track the Yahwehcare fleet — registration, assignment, and upcoming renewals</p>
+                                </div>
+                            </div>
+                            {activeTab === 'fleet' && (
+                                <button onClick={openAdd}
+                                    style={{padding:'9px 18px',background:BRAND,color:'white',border:'none',borderRadius:'8px',fontSize:'13px',fontWeight:'700',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:'6px'}}>
+                                    <Icon name='plus-circle' size={14} color='#fff' />Add Vehicle
+                                </button>
+                            )}
+                        </div>
+
+                        {/* ── Tab Bar ─────────────────────────────────────────────── */}
+                        <div style={{display:'flex',gap:'4px',marginBottom:'20px',background:dm?'#0F172A':'#F1F5F9',borderRadius:'10px',padding:'4px',border:`1px solid ${borderC}`,width:'fit-content'}}>
+                            {[
+                                {id:'fleet',     label:'Fleet',     icon:'truck'},
+                                {id:'alerts',    label:'Alerts',    icon:'bell'},
+                                {id:'analytics', label:'Analytics', icon:'bar-chart-2'},
+                            ].map(tab => (
+                                <button key={tab.id} onClick={()=>setActiveTab(tab.id)}
+                                    style={{padding:'7px 18px',border:'none',borderRadius:'7px',cursor:'pointer',fontSize:'13px',fontWeight:'600',
+                                        background: activeTab===tab.id ? (dm?'#1E293B':'#FFFFFF') : 'transparent',
+                                        color: activeTab===tab.id ? textP : textM,
+                                        boxShadow: activeTab===tab.id ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
+                                        display:'flex',alignItems:'center',gap:'6px',transition:'all 0.15s'}}>
+                                    <Icon name={tab.icon} size={13} color={activeTab===tab.id ? BRAND : textM} />
+                                    {tab.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* ══════════════════════ FLEET TAB ══════════════════════ */}
+                        {activeTab === 'fleet' && (<>
+                        {/* Filters */}
+                        <div style={{display:'flex',gap:'10px',marginBottom:'16px',flexWrap:'wrap'}}>
+                            <input type="text" placeholder="Search plate, make, model or assigned staff…" value={search} onChange={e=>setSearch(e.target.value)}
+                                style={{flex:1,minWidth:'200px',padding:'8px 12px',border:`1px solid ${borderC}`,borderRadius:'8px',fontSize:'13px',background:cardBg,color:textP}} />
+                            <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}
+                                style={{padding:'8px 12px',border:`1px solid ${borderC}`,borderRadius:'8px',fontSize:'13px',background:cardBg,color:textP}}>
+                                <option value="all">All Statuses</option>
+                                <option value="active">Active</option>
+                                <option value="in_service">In Service</option>
+                                <option value="retired">Retired</option>
+                            </select>
+                            <select value={companyFilter} onChange={e=>setCompanyFilter(e.target.value)}
+                                style={{padding:'8px 12px',border:`1px solid ${borderC}`,borderRadius:'8px',fontSize:'13px',background:cardBg,color:textP}}>
+                                <option value="all">All Companies</option>
+                                <option value="YC">Yahweh Care (YC)</option>
+                                <option value="YPC">Yahweh Property Care (YPC)</option>
+                            </select>
+                            <div style={{padding:'8px 14px',background:cardBg,border:`1px solid ${borderC}`,borderRadius:'8px',fontSize:'13px',color:textP,fontWeight:'600'}}>
+                                {filtered.length} vehicle{filtered.length!==1?'s':''}
+                            </div>
+                        </div>
+
+                        {/* Error */}
+                        {error && !showModal && (
+                            <div style={{background:dm?'rgba(239,68,68,0.12)':'#FEF2F2',border:`1px solid ${dm?'rgba(239,68,68,0.3)':'#FECACA'}`,borderRadius:'8px',padding:'10px 14px',marginBottom:'12px',fontSize:'13px',color:'#DC2626',display:'flex',alignItems:'center',gap:'6px'}}>
+                                <Icon name='alert-triangle' size={13} color='#DC2626' /> {error}
+                            </div>
+                        )}
+
+                        {/* Vehicles Table */}
+                        <div style={{background:cardBg,borderRadius:'12px',border:`1px solid ${borderC}`,overflow:'hidden'}}>
+                            {loading ? (
+                                <div style={{padding:'40px',textAlign:'center',color:textM,fontSize:'14px'}}>Loading fleet…</div>
+                            ) : filtered.length === 0 ? (
+                                <div style={{padding:'40px',textAlign:'center',color:textM,fontSize:'14px'}}>No vehicles found</div>
+                            ) : (
+                                <div style={{overflowX:'auto'}}>
+                                <table style={{width:'100%',borderCollapse:'collapse',minWidth:'1100px'}}>
+                                    <thead>
+                                        <tr style={{background:dm?'#0F172A':'#F8FAFC',borderBottom:`1px solid ${borderC}`}}>
+                                            {['Vehicle','Assigned To','Status','Rego Expiry','Comprehensive Insurance','CTP / Green Slip','Next Service','Actions'].map(h=>(
+                                                <th key={h} style={{padding:'11px 14px',textAlign:'left',fontSize:'11px',fontWeight:'700',color:textM,textTransform:'uppercase',letterSpacing:'0.05em'}}>{h}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {pagedVehicles.map(v=>(
+                                            <tr key={v.id} style={{borderBottom:`1px solid ${borderC}`}} className="table-row">
+                                                <td style={{padding:'12px 14px'}}>
+                                                    <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+                                                        <div style={{width:36,height:36,borderRadius:'9px',background:dm?'#1E293B':'#F1F5F9',border:`1px solid ${borderC}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,padding:'6px',boxSizing:'border-box',overflow:'hidden'}}>
+                                                            <VehicleBrandIcon make={v.make} size={24} iconColor={BRAND} />
+                                                        </div>
+                                                        <div>
+                                                            <div style={{fontSize:'13px',fontWeight:'700',color:textP,display:'flex',alignItems:'center',gap:'6px',flexWrap:'wrap'}}>
+                                                                {v.registration_number}
+                                                                {v.company && (
+                                                                    <span style={{fontSize:'9px',fontWeight:'700',padding:'1px 6px',borderRadius:'8px',background:v.company==='YC'?'#EAF4EC':'#EFF6FF',color:v.company==='YC'?'#2F5E3F':'#1D4ED8'}}>{v.company}</span>
+                                                                )}
+                                                            </div>
+                                                            <div style={{fontSize:'11px',color:textM}}>{v.make} {v.model}{v.year ? ` · ${v.year}` : ''}{v.color ? ` · ${v.color}` : ''}</div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td style={{padding:'12px 14px',fontSize:'12px',color:dm?'#c0cfec':'#334155'}}>
+                                                    {v.assigned_to_name || <span style={{fontStyle:'italic',color:dm?'#4a607f':'#94A3B8'}}>Unassigned</span>}
+                                                </td>
+                                                <td style={{padding:'12px 14px'}}>
+                                                    <span style={{fontSize:'10px',fontWeight:'600',padding:'2px 8px',borderRadius:'6px',background:`${STATUS_COLORS[v.status]||'#7EB842'}18`,color:STATUS_COLORS[v.status]||'#7EB842',border:`1px solid ${STATUS_COLORS[v.status]||'#7EB842'}30`}}>
+                                                        {STATUS_LABELS[v.status]||v.status}
+                                                    </span>
+                                                </td>
+                                                <td style={{padding:'12px 14px'}}><DateCell value={v.registration_expiry} /></td>
+                                                <td style={{padding:'12px 14px'}}><DateCell value={v.insurance_expiry} insurer={v.comprehensive_insurer} /></td>
+                                                <td style={{padding:'12px 14px'}}><DateCell value={v.ctp_expiry} insurer={v.ctp_insurer} /></td>
+                                                <td style={{padding:'12px 14px'}}><DateCell value={v.next_service_due} /></td>
+                                                <td style={{padding:'12px 14px'}}>
+                                                    <div style={{display:'flex',gap:'6px'}}>
+                                                        <button onClick={()=>openEdit(v)} title="Edit"
+                                                            style={{background:'none',border:`1px solid ${borderC}`,borderRadius:'6px',width:'28px',height:'28px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                                                            <Icon name='pencil' size={13} color={textM} />
+                                                        </button>
+                                                        <button onClick={()=>setDelConfirm(v)} title="Remove"
+                                                            style={{background:'none',border:`1px solid ${borderC}`,borderRadius:'6px',width:'28px',height:'28px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                                                            <Icon name='trash-2' size={13} color='#DC2626' />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                </div>
+                            )}
+                            {!loading && filtered.length > 0 && (
+                                <PageBar
+                                    page={fleetSafePage} setPage={setFleetPage}
+                                    pageSize={fleetPageSize} setPageSize={setFleetPageSize}
+                                    total={filtered.length}
+                                    itemLabel="vehicle"
+                                    dm={dm} bg={cardBg} border={borderC} muted={textM}
+                                />
+                            )}
+                        </div>
+
+                        {/* Stats row */}
+                        {!loading && (
+                            <div style={{display:'flex',gap:'12px',marginTop:'14px',flexWrap:'wrap'}}>
+                                {[
+                                    {label:'Total Vehicles', val:vehicles.length,                                     color:'#5B7C99', icon:'truck'},
+                                    {label:'Active',         val:vehicles.filter(v=>v.status==='active').length,      color:'#5F8F6E', icon:'check-circle'},
+                                    {label:'In Service',     val:vehicles.filter(v=>v.status==='in_service').length,  color:'#B08D3F', icon:'wrench'},
+                                    {label:'Retired',        val:vehicles.filter(v=>v.status==='retired').length,     color:'#8B93A1', icon:'x-circle'},
+                                    {label:'Expiring Soon',  val:expiringSoonCount,                                   color:'#B0655B', icon:'alert-triangle'},
+                                ].map(s=>(
+                                    <div key={s.label} className="stat-card" style={{background:cardBg,border:`1px solid ${borderC}`,borderRadius:'10px',padding:'10px 16px',display:'flex',gap:'10px',alignItems:'center',cursor:'default'}}>
+                                        <div style={{width:'28px',height:'28px',borderRadius:'50%',background:s.color,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                                            <Icon name={s.icon} size={13} color='#fff' />
+                                        </div>
+                                        <div>
+                                            <div style={{fontSize:'18px',fontWeight:'700',color:textP,lineHeight:1.1}}>{s.val}</div>
+                                            <div style={{fontSize:'11px',color:textM,fontWeight:'600'}}>{s.label}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        </>)}
+
+                        {/* ══════════════════════ ALERTS TAB ══════════════════════ */}
+                        {activeTab === 'alerts' && (() => {
+                            const ToggleSwitch = ({checked, onChange, disabled}) => (
+                                <div onClick={()=>!disabled&&onChange(!checked)}
+                                    style={{width:'36px',height:'20px',borderRadius:'10px',background:checked?BRAND:dm?'#334155':'#CBD5E1',cursor:disabled?'default':'pointer',position:'relative',transition:'background 0.2s',flexShrink:0}}>
+                                    <div style={{position:'absolute',top:'2px',left:checked?'18px':'2px',width:'16px',height:'16px',borderRadius:'50%',background:'white',transition:'left 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.25)'}} />
+                                </div>
+                            );
+                            const ChannelBadge = ({label, checked, color, onChange}) => (
+                                <button onClick={onChange}
+                                    style={{padding:'4px 10px',border:`1px solid ${checked?color:borderC}`,borderRadius:'6px',background:checked?`${color}18`:'transparent',color:checked?color:textM,fontSize:'11px',fontWeight:'600',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:'4px',transition:'all 0.15s'}}>
+                                    <Icon name={label==='Email'?'mail':'bell'} size={11} color={checked?color:textM} />
+                                    {label}
+                                </button>
+                            );
+                            return (
+                                <div>
+                                    {/* Info banner */}
+                                    <div style={{background:dm?'rgba(27,117,187,0.10)':'#EFF6FF',border:`1px solid ${dm?'rgba(27,117,187,0.25)':'#BFDBFE'}`,borderRadius:'10px',padding:'12px 16px',marginBottom:'20px',display:'flex',alignItems:'flex-start',gap:'10px'}}>
+                                        <Icon name='bell' size={16} color={BRAND} style={{flexShrink:0,marginTop:1}} />
+                                        <div>
+                                            <div style={{fontSize:'13px',fontWeight:'600',color:textP}}>Vehicle Alert System</div>
+                                            <div style={{fontSize:'12px',color:textM,marginTop:'2px'}}>Configure which events trigger notifications, choose delivery channels (email / push), and select which team members receive each alert. Toggle the master switch to enable or disable any rule.</div>
+                                        </div>
+                                    </div>
+
+                                    {alertConfigs.length === 0 && (
+                                        <div style={{textAlign:'center',padding:'40px',color:textM,fontSize:'14px'}}>Loading alert configurations…</div>
+                                    )}
+
+                                    {ALERT_GROUPS.map(group => {
+                                        const configs = alertConfigs.filter(c => c.alert_type === group.type);
+                                        if (configs.length === 0) return null;
+                                        return (
+                                            <div key={group.type} style={{marginBottom:'24px'}}>
+                                                {/* Group header */}
+                                                <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'10px'}}>
+                                                    <div style={{width:'28px',height:'28px',borderRadius:'7px',background:`${group.color}18`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                                                        <Icon name={group.icon} size={13} color={group.color} />
+                                                    </div>
+                                                    <div>
+                                                        <div style={{fontSize:'13px',fontWeight:'700',color:textP}}>{group.label}</div>
+                                                        <div style={{fontSize:'11px',color:textM}}>{group.desc}</div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Alert config cards */}
+                                                <div style={{display:'flex',flexDirection:'column',gap:'8px',paddingLeft:'4px'}}>
+                                                    {configs.map(cfg => {
+                                                        const isSaving = alertSaving[cfg.alert_key];
+                                                        const isTesting = alertTesting[cfg.alert_key];
+                                                        const isExpanded = expandedAlert === cfg.alert_key;
+                                                        const recipients = Array.isArray(cfg.recipient_user_ids) ? cfg.recipient_user_ids : [];
+                                                        return (
+                                                            <div key={cfg.alert_key}
+                                                                style={{background:cardBg,border:`1px solid ${cfg.is_active?group.color+'30':borderC}`,borderRadius:'10px',overflow:'hidden',transition:'border-color 0.2s'}}>
+                                                                {/* Card header row */}
+                                                                <div style={{padding:'12px 16px',display:'flex',alignItems:'center',gap:'12px'}}>
+                                                                    <ToggleSwitch
+                                                                        checked={cfg.is_active}
+                                                                        disabled={isSaving}
+                                                                        onChange={v => updateAlertConfig(cfg.alert_key, {is_active: v})}
+                                                                    />
+                                                                    <div style={{flex:1}}>
+                                                                        <div style={{fontSize:'13px',fontWeight:'600',color:cfg.is_active?textP:textM}}>{cfg.label}</div>
+                                                                        <div style={{fontSize:'11px',color:textM,marginTop:'2px'}}>{cfg.description}</div>
+                                                                    </div>
+                                                                    {/* Channel toggles (only shown when active) */}
+                                                                    {cfg.is_active && (
+                                                                        <div style={{display:'flex',gap:'6px',flexShrink:0}}>
+                                                                            <ChannelBadge label="Email" checked={cfg.email_enabled} color={BRAND} onChange={()=>updateAlertConfig(cfg.alert_key,{email_enabled:!cfg.email_enabled})} />
+                                                                            <ChannelBadge label="Push" checked={cfg.push_enabled} color='#8B5CF6' onChange={()=>updateAlertConfig(cfg.alert_key,{push_enabled:!cfg.push_enabled})} />
+                                                                        </div>
+                                                                    )}
+                                                                    {/* Expand/collapse + test */}
+                                                                    <div style={{display:'flex',gap:'6px',flexShrink:0}}>
+                                                                        {cfg.is_active && (cfg.email_enabled || cfg.push_enabled) && (
+                                                                            <button onClick={()=>testAlert(cfg.alert_key)} disabled={isTesting}
+                                                                                title="Send test notification"
+                                                                                style={{padding:'4px 10px',border:`1px solid ${borderC}`,borderRadius:'6px',background:'transparent',color:textM,fontSize:'11px',fontWeight:'600',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:'4px',opacity:isTesting?0.6:1}}>
+                                                                                <Icon name='send' size={11} color={textM} />
+                                                                                {isTesting ? 'Sending…' : 'Test'}
+                                                                            </button>
+                                                                        )}
+                                                                        <button onClick={()=>setExpandedAlert(isExpanded?null:cfg.alert_key)}
+                                                                            style={{background:'none',border:`1px solid ${borderC}`,borderRadius:'6px',width:'28px',height:'28px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
+                                                                            title={isExpanded?'Collapse':'Manage recipients'}>
+                                                                            <Icon name={isExpanded?'chevron-up':'users'} size={13} color={textM} />
+                                                                        </button>
+                                                                    </div>
+                                                                    {isSaving && <div style={{width:'14px',height:'14px',border:`2px solid ${BRAND}`,borderTopColor:'transparent',borderRadius:'50%',animation:'spin 0.65s linear infinite',flexShrink:0}} />}
+                                                                </div>
+
+                                                                {/* Expanded: recipient management */}
+                                                                {isExpanded && (
+                                                                    <div style={{borderTop:`1px solid ${borderC}`,padding:'12px 16px',background:dm?'rgba(255,255,255,0.02)':'rgba(0,0,0,0.02)'}}>
+                                                                        <div style={{fontSize:'11px',fontWeight:'700',color:textM,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'10px'}}>
+                                                                            Notification Recipients
+                                                                        </div>
+                                                                        {staffList.length === 0 ? (
+                                                                            <div style={{fontSize:'12px',color:textM}}>No staff members found</div>
+                                                                        ) : (
+                                                                            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:'6px'}}>
+                                                                                {staffList.map(s => {
+                                                                                    const checked = recipients.includes(s.id);
+                                                                                    return (
+                                                                                        <label key={s.id}
+                                                                                            style={{display:'flex',alignItems:'center',gap:'8px',padding:'6px 10px',borderRadius:'7px',border:`1px solid ${checked?group.color+'40':borderC}`,background:checked?`${group.color}08`:'transparent',cursor:'pointer',transition:'all 0.15s'}}>
+                                                                                            <input type="checkbox" checked={checked}
+                                                                                                onChange={e=>toggleAlertRecipient(cfg.alert_key, s.id, e.target.checked)}
+                                                                                                style={{accentColor:group.color,width:'13px',height:'13px',flexShrink:0}} />
+                                                                                            <div style={{flex:1,minWidth:0}}>
+                                                                                                <div style={{fontSize:'12px',fontWeight:'600',color:textP,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
+                                                                                                <div style={{fontSize:'10px',color:textM,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.email}</div>
+                                                                                            </div>
+                                                                                        </label>
+                                                                                    );
+                                                                                })}
+                                                                            </div>
+                                                                        )}
+                                                                        {recipients.length > 0 && (
+                                                                            <div style={{marginTop:'8px',fontSize:'11px',color:textM}}>
+                                                                                {recipients.length} recipient{recipients.length!==1?'s':''} selected
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        })()}
+
+                        {/* ══════════════════════ ANALYTICS TAB ══════════════════════ */}
+                        {activeTab === 'analytics' && (() => {
+                            const yr = new Date().getFullYear();
+                            const total      = vehicles.length;
+                            const active     = vehicles.filter(v=>v.status==='active').length;
+                            const inSvc      = vehicles.filter(v=>v.status==='in_service').length;
+                            const retired    = vehicles.filter(v=>v.status==='retired').length;
+                            const assigned   = vehicles.filter(v=>v.assigned_to).length;
+                            const unassigned = total - assigned;
+                            const ycCount    = vehicles.filter(v=>v.company==='YC').length;
+                            const ypcCount   = vehicles.filter(v=>v.company==='YPC').length;
+                            const exp30  = vehicles.filter(v=>expiryFlag(v.registration_expiry,30)||expiryFlag(v.insurance_expiry,30)||expiryFlag(v.ctp_expiry,30)||expiryFlag(v.next_service_due,30)).length;
+                            const exp14  = vehicles.filter(v=>expiryFlag(v.registration_expiry,14)||expiryFlag(v.insurance_expiry,14)||expiryFlag(v.ctp_expiry,14)||expiryFlag(v.next_service_due,14)).length;
+                            const exp7   = vehicles.filter(v=>expiryFlag(v.registration_expiry,7) ||expiryFlag(v.insurance_expiry,7) ||expiryFlag(v.ctp_expiry,7) ||expiryFlag(v.next_service_due,7)).length;
+                            const avgAge = total>0 ? (vehicles.filter(v=>v.year).reduce((s,v)=>s+(yr-v.year),0) / Math.max(1,vehicles.filter(v=>v.year).length)).toFixed(1) : '—';
+                            const assignRate = total>0 ? Math.round((assigned/total)*100) : 0;
+
+                            // Upcoming expiry items (next 60 days)
+                            const upcomingItems = [];
+                            vehicles.forEach(v => {
+                                const checks = [
+                                    { field: 'Registration',           date: v.registration_expiry },
+                                    { field: 'Comp. Insurance',        date: v.insurance_expiry },
+                                    { field: 'CTP / Green Slip',       date: v.ctp_expiry },
+                                    { field: 'Next Service',           date: v.next_service_due },
+                                ];
+                                checks.forEach(({field, date}) => {
+                                    const f = expiryFlag(date, 60);
+                                    if (f) upcomingItems.push({ reg: v.registration_number, make: v.make, model: v.model, field, date, flag: f });
+                                });
+                            });
+                            upcomingItems.sort((a,b) => new Date(a.date)-new Date(b.date));
+
+                            const StatCard = ({label, val, sub, color, icon}) => (
+                                <div style={{background:cardBg,border:`1px solid ${borderC}`,borderRadius:'10px',padding:'14px 16px',display:'flex',gap:'12px',alignItems:'center',flex:'1 1 120px'}}>
+                                    <div style={{width:'36px',height:'36px',borderRadius:'9px',background:`${color}18`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                                        <Icon name={icon} size={16} color={color} />
+                                    </div>
+                                    <div>
+                                        <div style={{fontSize:'22px',fontWeight:'800',color:textP,lineHeight:1}}>{val}</div>
+                                        <div style={{fontSize:'11px',fontWeight:'600',color:textM,marginTop:'2px'}}>{label}</div>
+                                        {sub && <div style={{fontSize:'10px',color:textM,marginTop:'1px'}}>{sub}</div>}
+                                    </div>
+                                </div>
+                            );
+
+                            const BarRow = ({label, val, max, color}) => {
+                                const pct = max > 0 ? Math.round((val/max)*100) : 0;
+                                return (
+                                    <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'7px'}}>
+                                        <div style={{width:'110px',fontSize:'12px',color:textP,fontWeight:'500',flexShrink:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</div>
+                                        <div style={{flex:1,height:'8px',borderRadius:'4px',background:dm?'#334155':'#E2E8F0',overflow:'hidden'}}>
+                                            <div style={{width:`${pct}%`,height:'100%',borderRadius:'4px',background:color,transition:'width 0.4s'}} />
+                                        </div>
+                                        <div style={{width:'28px',fontSize:'12px',fontWeight:'700',color:textP,textAlign:'right',flexShrink:0}}>{val}</div>
+                                    </div>
+                                );
+                            };
+
+                            return (
+                                <div>
+                                    {/* Summary stat cards */}
+                                    <div style={{display:'flex',gap:'10px',flexWrap:'wrap',marginBottom:'20px'}}>
+                                        <StatCard label="Total Fleet"    val={total}      color='#1B75BB' icon='truck'         sub={`avg age ${avgAge} yrs`} />
+                                        <StatCard label="Active"         val={active}     color='#5F8F6E' icon='check-circle'  sub={`${total>0?Math.round(active/total*100):0}% of fleet`} />
+                                        <StatCard label="In Service"     val={inSvc}      color='#B08D3F' icon='wrench'        sub={`${total>0?Math.round(inSvc/total*100):0}% of fleet`} />
+                                        <StatCard label="Retired"        val={retired}    color='#8B93A1' icon='x-circle'      sub={`${total>0?Math.round(retired/total*100):0}% of fleet`} />
+                                        <StatCard label="Assigned"       val={assigned}   color='#3B82F6' icon='user'          sub={`${assignRate}% assignment rate`} />
+                                        <StatCard label="Unassigned"     val={unassigned} color='#94A3B8' icon='user-x'        sub={`${100-assignRate}% of fleet`} />
+                                    </div>
+
+                                    {/* Expiry urgency row */}
+                                    <div style={{display:'flex',gap:'10px',marginBottom:'20px',flexWrap:'wrap'}}>
+                                        {[
+                                            { label:'Expiring in 7 days',  val: exp7,  color:'#DC2626', icon:'alert-triangle' },
+                                            { label:'Expiring in 14 days', val: exp14, color:'#B45309', icon:'alert-triangle' },
+                                            { label:'Expiring in 30 days', val: exp30, color:'#D97706', icon:'clock' },
+                                        ].map(s=>(
+                                            <div key={s.label} style={{background:s.val>0?`${s.color}10`:cardBg,border:`1px solid ${s.val>0?s.color+'35':borderC}`,borderRadius:'10px',padding:'12px 16px',display:'flex',gap:'10px',alignItems:'center',flex:'1 1 150px'}}>
+                                                <Icon name={s.icon} size={18} color={s.val>0?s.color:textM} />
+                                                <div>
+                                                    <div style={{fontSize:'20px',fontWeight:'800',color:s.val>0?s.color:textP}}>{s.val}</div>
+                                                    <div style={{fontSize:'11px',color:s.val>0?s.color:textM,fontWeight:'600'}}>{s.label}</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Charts row */}
+                                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'14px',marginBottom:'20px'}}>
+                                        {/* Make distribution */}
+                                        <div style={{background:cardBg,border:`1px solid ${borderC}`,borderRadius:'12px',padding:'16px'}}>
+                                            <div style={{fontSize:'12px',fontWeight:'700',color:textP,marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px'}}>
+                                                <Icon name='truck' size={13} color={BRAND} />Fleet by Make
+                                            </div>
+                                            <canvas ref={makeChartRef} style={{maxHeight:'180px'}} />
+                                        </div>
+                                        {/* Status doughnut */}
+                                        <div style={{background:cardBg,border:`1px solid ${borderC}`,borderRadius:'12px',padding:'16px'}}>
+                                            <div style={{fontSize:'12px',fontWeight:'700',color:textP,marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px'}}>
+                                                <Icon name='pie-chart' size={13} color={BRAND} />Status Distribution
+                                            </div>
+                                            <canvas ref={statusChartRef} style={{maxHeight:'180px'}} />
+                                        </div>
+                                        {/* Fleet age */}
+                                        <div style={{background:cardBg,border:`1px solid ${borderC}`,borderRadius:'12px',padding:'16px'}}>
+                                            <div style={{fontSize:'12px',fontWeight:'700',color:textP,marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px'}}>
+                                                <Icon name='calendar' size={13} color={BRAND} />Fleet Age
+                                            </div>
+                                            <canvas ref={ageChartRef} style={{maxHeight:'180px'}} />
+                                        </div>
+                                    </div>
+
+                                    {/* Company + Assignment breakdown */}
+                                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px',marginBottom:'20px'}}>
+                                        <div style={{background:cardBg,border:`1px solid ${borderC}`,borderRadius:'12px',padding:'16px'}}>
+                                            <div style={{fontSize:'12px',fontWeight:'700',color:textP,marginBottom:'12px'}}>Company Split</div>
+                                            <BarRow label="Yahweh Property Care (YPC)" val={ypcCount} max={total} color='#1B75BB' />
+                                            <BarRow label="Yahweh Care (YC)"           val={ycCount}  max={total} color='#5F8F6E' />
+                                            <BarRow label="Unassigned to company"       val={total-ycCount-ypcCount} max={total} color='#94A3B8' />
+                                        </div>
+                                        <div style={{background:cardBg,border:`1px solid ${borderC}`,borderRadius:'12px',padding:'16px'}}>
+                                            <div style={{fontSize:'12px',fontWeight:'700',color:textP,marginBottom:'12px'}}>Assignment Rate</div>
+                                            <BarRow label="Assigned to staff"   val={assigned}   max={total} color='#3B82F6' />
+                                            <BarRow label="Unassigned"          val={unassigned} max={total} color='#94A3B8' />
+                                            <div style={{marginTop:'12px',fontSize:'12px',color:textM}}>
+                                                {assignRate}% of the fleet is currently assigned to a staff member.
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Upcoming expiry table */}
+                                    <div style={{background:cardBg,border:`1px solid ${borderC}`,borderRadius:'12px',padding:'16px'}}>
+                                        <div style={{fontSize:'12px',fontWeight:'700',color:textP,marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px'}}>
+                                            <Icon name='clock' size={13} color='#D97706' />Upcoming Expirations (next 60 days)
+                                            {upcomingItems.length > 0 && <span style={{marginLeft:'auto',fontSize:'11px',fontWeight:'600',color:'#D97706'}}>{upcomingItems.length} item{upcomingItems.length!==1?'s':''}</span>}
+                                        </div>
+                                        {upcomingItems.length === 0 ? (
+                                            <div style={{textAlign:'center',padding:'24px',color:textM,fontSize:'13px'}}>
+                                                <Icon name='check-circle' size={24} color='#5F8F6E' />
+                                                <div style={{marginTop:'8px'}}>No items expiring in the next 60 days</div>
+                                            </div>
+                                        ) : (
+                                            <div style={{overflowX:'auto'}}>
+                                            <table style={{width:'100%',borderCollapse:'collapse',fontSize:'12px',minWidth:'500px'}}>
+                                                <thead>
+                                                    <tr style={{borderBottom:`1px solid ${borderC}`,background:dm?'#0F172A':'#F8FAFC'}}>
+                                                        {['Vehicle','Type','Expiry Date','Status'].map(h=>(
+                                                            <th key={h} style={{padding:'8px 12px',textAlign:'left',fontWeight:'700',color:textM,fontSize:'10px',textTransform:'uppercase',letterSpacing:'0.05em'}}>{h}</th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {upcomingItems.map((item,i)=>(
+                                                        <tr key={i} style={{borderBottom:`1px solid ${borderC}`}}>
+                                                            <td style={{padding:'8px 12px',fontWeight:'600',color:textP}}>{item.reg}<span style={{marginLeft:'6px',fontSize:'10px',color:textM,fontWeight:'400'}}>{item.make} {item.model}</span></td>
+                                                            <td style={{padding:'8px 12px',color:textM}}>{item.field}</td>
+                                                            <td style={{padding:'8px 12px',color:textP}}>{new Date(item.date).toLocaleDateString('en-AU',{day:'2-digit',month:'short',year:'numeric'})}</td>
+                                                            <td style={{padding:'8px 12px'}}>
+                                                                <span style={{fontSize:'10px',fontWeight:'700',color:item.flag.color,background:`${item.flag.color}15`,padding:'2px 7px',borderRadius:'5px'}}>{item.flag.label}</span>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
+                    </div>
+
+                    {/* ── ADD/EDIT VEHICLE MODAL ────────────────────────────── */}
+                    {showModal && (
+                        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}>
+                            <div style={{background:cardBg,borderRadius:'16px',width:'100%',maxWidth:'640px',maxHeight:'90vh',overflow:'auto',boxShadow:'0 20px 60px rgba(0,0,0,0.25)'}}>
+                                <div style={{padding:'18px 24px',borderBottom:`1px solid ${borderC}`,display:'flex',justifyContent:'space-between',alignItems:'center',background:cardBg,borderRadius:'16px 16px 0 0'}}>
+                                    <h2 style={{fontSize:'16px',fontWeight:'700',color:textP,margin:0}}>
+                                        <span style={{display:'flex',alignItems:'center',gap:'6px'}}>{modalMode==='add'?<Icon name='plus-circle' size={16} color={BRAND} />:<Icon name='pencil' size={16} color={BRAND} />}{modalMode==='add'?'Add New Vehicle':'Edit Vehicle'}</span>
+                                    </h2>
+                                    <button onClick={()=>setShowModal(false)} style={{background:'transparent',border:'none',color:textM,borderRadius:'6px',width:'28px',height:'28px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name='x' size={16} color={textM} /></button>
+                                </div>
+
+                                <div style={{padding:'20px 24px'}}>
+                                    {error && <div style={{background:dm?'rgba(239,68,68,0.12)':'#FEF2F2',border:`1px solid ${dm?'rgba(239,68,68,0.3)':'#FECACA'}`,borderRadius:'8px',padding:'8px 12px',marginBottom:'14px',fontSize:'12px',color:'#DC2626',display:'flex',alignItems:'center',gap:'6px'}}><Icon name='alert-triangle' size={12} color='#DC2626' />{error}</div>}
+
+                                    <p style={{fontSize:'11px',fontWeight:'800',color:dm?'#C77DB8':'#1B75BB',textTransform:'uppercase',letterSpacing:'0.06em',margin:'0 0 10px'}}>Vehicle Details</p>
+                                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px',marginBottom:'20px'}}>
+                                        <div>
+                                            <label style={labelStyle}>Registration / Plate Number <span style={{color:'#DC2626'}}>*</span></label>
+                                            <input style={inputStyle} value={form.registration_number} onChange={e=>setForm(f=>({...f,registration_number:e.target.value.toUpperCase()}))} placeholder="e.g. ABC123"/>
+                                        </div>
+                                        <div>
+                                            <label style={labelStyle}>Year</label>
+                                            <input style={inputStyle} type="number" value={form.year} onChange={e=>setForm(f=>({...f,year:e.target.value}))} placeholder="e.g. 2022"/>
+                                        </div>
+                                        <div>
+                                            <label style={labelStyle}>Make <span style={{color:'#DC2626'}}>*</span></label>
+                                            <input style={inputStyle} value={form.make} onChange={e=>setForm(f=>({...f,make:e.target.value}))} placeholder="e.g. Toyota"/>
+                                        </div>
+                                        <div>
+                                            <label style={labelStyle}>Model <span style={{color:'#DC2626'}}>*</span></label>
+                                            <input style={inputStyle} value={form.model} onChange={e=>setForm(f=>({...f,model:e.target.value}))} placeholder="e.g. Hiace"/>
+                                        </div>
+                                        <div>
+                                            <label style={labelStyle}>Colour</label>
+                                            <input style={inputStyle} value={form.color} onChange={e=>setForm(f=>({...f,color:e.target.value}))} placeholder="e.g. White"/>
+                                        </div>
+                                        <div>
+                                            <label style={labelStyle}>Company</label>
+                                            <select style={inputStyle} value={form.company} onChange={e=>setForm(f=>({...f,company:e.target.value}))}>
+                                                <option value="">— Select —</option>
+                                                <option value="YC">{COMPANY_LABELS.YC}</option>
+                                                <option value="YPC">{COMPANY_LABELS.YPC}</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label style={labelStyle}>Assigned To</label>
+                                            {/* Toggle: Staff vs External */}
+                                            <div style={{display:'flex',gap:'6px',marginBottom:'8px'}}>
+                                                {['staff','external'].map(t=>(
+                                                    <button key={t} type="button"
+                                                        onClick={()=>setForm(f=>({...f,assignee_type:t,assigned_to:'',assigned_to_external:''}))}
+                                                        style={{flex:1,padding:'5px 0',fontSize:'12px',fontWeight:'600',borderRadius:'7px',cursor:'pointer',
+                                                            border:`1px solid ${form.assignee_type===t?BRAND:borderC}`,
+                                                            background:form.assignee_type===t?(dm?'rgba(27,117,187,0.18)':'#EFF6FF'):(dm?'#1E293B':'#F8FAFC'),
+                                                            color:form.assignee_type===t?BRAND:textM,transition:'all 0.15s'}}>
+                                                        {t==='staff'?'Staff Member':'External Person'}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            {form.assignee_type === 'staff' ? (
+                                                <select style={inputStyle} value={form.assigned_to} onChange={e=>setForm(f=>({...f,assigned_to:e.target.value}))}>
+                                                    <option value="">— Unassigned —</option>
+                                                    {staffList.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+                                                </select>
+                                            ) : (
+                                                <input style={inputStyle} type="text" placeholder="Full name of external person"
+                                                    value={form.assigned_to_external}
+                                                    onChange={e=>setForm(f=>({...f,assigned_to_external:e.target.value}))} />
+                                            )}
+                                        </div>
+                                        <div>
+                                            <label style={labelStyle}>Status</label>
+                                            <select style={inputStyle} value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))}>
+                                                <option value="active">Active</option>
+                                                <option value="in_service">In Service</option>
+                                                <option value="retired">Retired</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <p style={{fontSize:'11px',fontWeight:'800',color:dm?'#C77DB8':'#1B75BB',textTransform:'uppercase',letterSpacing:'0.06em',margin:'0 0 10px'}}>Registration & Insurance</p>
+                                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px',marginBottom:'20px'}}>
+                                        <div>
+                                            <label style={labelStyle}>Registration Expiry</label>
+                                            <input style={inputStyle} type="date" value={form.registration_expiry} onChange={e=>setForm(f=>({...f,registration_expiry:e.target.value}))}/>
+                                        </div>
+                                        <div>
+                                            <label style={labelStyle}>Next Service Due</label>
+                                            <input style={inputStyle} type="date" value={form.next_service_due} onChange={e=>setForm(f=>({...f,next_service_due:e.target.value}))}/>
+                                        </div>
+                                        <div>
+                                            <label style={labelStyle}>Comprehensive Insurer</label>
+                                            <input style={inputStyle} value={form.comprehensive_insurer} onChange={e=>setForm(f=>({...f,comprehensive_insurer:e.target.value}))} placeholder="e.g. SSAA Insurance"/>
+                                        </div>
+                                        <div>
+                                            <label style={labelStyle}>Comprehensive Insurance Expiry</label>
+                                            <input style={inputStyle} type="date" value={form.insurance_expiry} onChange={e=>setForm(f=>({...f,insurance_expiry:e.target.value}))}/>
+                                        </div>
+                                        <div>
+                                            <label style={labelStyle}>CTP / Green Slip Insurer</label>
+                                            <input style={inputStyle} value={form.ctp_insurer} onChange={e=>setForm(f=>({...f,ctp_insurer:e.target.value}))} placeholder="e.g. QBE"/>
+                                        </div>
+                                        <div>
+                                            <label style={labelStyle}>CTP / Green Slip Expiry</label>
+                                            <input style={inputStyle} type="date" value={form.ctp_expiry} onChange={e=>setForm(f=>({...f,ctp_expiry:e.target.value}))}/>
+                                        </div>
+                                    </div>
+
+                                    <div style={{display:'grid',gridTemplateColumns:'1fr',gap:'14px'}}>
+                                        <div>
+                                            <label style={labelStyle}>Notes</label>
+                                            <textarea style={{...inputStyle, minHeight:'70px', resize:'vertical'}} value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="Any additional notes about this vehicle…"/>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={{padding:'16px 24px',borderTop:`1px solid ${borderC}`,display:'flex',justifyContent:'flex-end',gap:'10px',background:dm?'#0F172A':'#F8FAFC',borderRadius:'0 0 16px 16px'}}>
+                                    <button onClick={()=>setShowModal(false)} style={{padding:'9px 18px',background:cardBg,border:`1px solid ${borderC}`,borderRadius:'8px',fontSize:'13px',fontWeight:'600',color:textM,cursor:'pointer'}}>Cancel</button>
+                                    <button onClick={handleSave} disabled={saving} style={{padding:'9px 20px',background:BRAND,color:'white',border:'none',borderRadius:'8px',fontSize:'13px',fontWeight:'700',cursor:'pointer',opacity:saving?0.7:1}}>
+                                        {saving ? 'Saving…' : (modalMode==='add'?'Add Vehicle':'Save Changes')}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── DELETE CONFIRM ───────────────────────────────────── */}
+                    {delConfirm && (
+                        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                            <div style={{background:cardBg,borderRadius:'14px',width:'420px',boxShadow:'0 20px 60px rgba(0,0,0,0.25)',overflow:'hidden'}}>
+                                <div style={{padding:'20px 24px',textAlign:'center'}}>
+                                    <div style={{display:'flex',justifyContent:'center',marginBottom:'12px'}}><Icon name='alert-triangle' size={40} color='#EF4444' /></div>
+                                    <h3 style={{fontSize:'16px',fontWeight:'700',color:textP,margin:'0 0 8px'}}>Remove Vehicle?</h3>
+                                    <p style={{fontSize:'13px',color:textM,margin:'0 0 8px'}}>
+                                        <strong>{delConfirm.registration_number}</strong> will be removed from the fleet list.
+                                    </p>
+                                    <p style={{fontSize:'11px',color:dm?'#4a607f':'#94A3B8'}}>This can be undone by re-adding the vehicle with the same plate number.</p>
+                                </div>
+                                <div style={{padding:'12px 20px',borderTop:`1px solid ${dm?'rgba(27,117,187,0.10)':'#EEF2F8'}`,display:'flex',gap:'10px',justifyContent:'center',background:dm?'rgba(4,8,20,0.6)':'#F8FAFF'}}>
+                                    <button onClick={()=>setDelConfirm(null)} style={{padding:'9px 20px',background:cardBg,border:`1px solid ${borderC}`,borderRadius:'8px',fontSize:'13px',fontWeight:'600',cursor:'pointer',color:textP}}>Cancel</button>
+                                    <button onClick={handleDelete} style={{padding:'9px 20px',background:'#DC2626',color:'white',border:'none',borderRadius:'8px',fontSize:'13px',fontWeight:'700',cursor:'pointer'}}>Remove</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </main>
+            );
+        });
+
 
         // ============================================================
         // EX-STAFF PAGE (Bootstrap Admin only)
@@ -8951,7 +10258,7 @@
         // who rejoins Yahwehcare. Reuses the PATCH /users/:id {is_active:true}
         // route — the backend already gates activation/deactivation symmetrically
         // to bootstrap admins only (see users.routes.ts).
-        function ExStaffPage() {
+        const ExStaffPage = React.memo(function ExStaffPage() {
             const dm = React.useContext(DarkModeContext);
             const [staff, setStaff]     = React.useState([]);
             const [loading, setLoading] = React.useState(true);
@@ -9008,8 +10315,9 @@
                 finally { setReactivating(null); }
             };
 
-            const Avatar = ({ name, size = 36 }) => {
+            const Avatar = ({ name, photoUrl, size = 36 }) => {
                 const ini = (name || '').split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() || '').join('');
+                if (photoUrl) return <img src={photoUrl} alt="" style={{width:size,height:size,borderRadius:'50%',objectFit:'cover',flexShrink:0,filter:'grayscale(60%)'}}/>;
                 return <div style={{width:size,height:size,borderRadius:'50%',background:'#94A3B8',display:'flex',alignItems:'center',justifyContent:'center',fontSize:size*0.38,fontWeight:700,color:'white',flexShrink:0}}>{ini}</div>;
             };
 
@@ -9049,7 +10357,7 @@
                                             <tr key={s.id} style={{borderBottom:`1px solid ${bdr}`}}>
                                                 <td style={{padding:'9px 14px',color:txt}}>
                                                     <div style={{display:'flex',alignItems:'center',gap:10}}>
-                                                        <Avatar name={s.name} />
+                                                        <Avatar name={s.name} photoUrl={s.profile_photo_url} />
                                                         <div>
                                                             <div style={{fontWeight:600}}>{s.name}</div>
                                                             <span style={{fontSize:10,fontWeight:700,color:'#991B1B',background:dm?'rgba(239,68,68,0.12)':'#FEF2F2',padding:'1px 6px',borderRadius:10}}>No longer with Yahwehcare</span>
@@ -9089,14 +10397,14 @@
                     )}
                 </main>
             );
-        }
+        });
 
         // ============================================================
         // ACTIVITY LOG PAGE (Bootstrap Admin only)
         // ============================================================
         // Thin viewer over GET /audit-logs (rbac.middleware.ts now lets
         // isBootstrapAdmin bypass the audit.read permission check).
-        function ActivityLogPage() {
+        const ActivityLogPage = React.memo(function ActivityLogPage() {
             const dm = React.useContext(DarkModeContext);
             const [entries, setEntries] = React.useState([]);
             const [total, setTotal]     = React.useState(0);
@@ -9572,7 +10880,7 @@
                     )}
                 </main>
             );
-        }
+        });
 
         // isMobile — module-level, stable reference (not recreated per render)
         const isMobile = () => window.innerWidth < 1024;
@@ -9627,6 +10935,44 @@
                     return stored ? JSON.parse(stored) : null;
                 } catch(e) { return null; }
             });
+
+            // ── Hydrate full profile (photo + extras) from /users/me after login ─
+            // profile_photo_url is NOT included in the login redirect URL (it's a
+            // base64 JPEG that would make the URL too long and get truncated).
+            // Fetch it once from the API after the user object is available.
+            React.useEffect(() => {
+                if (!currentUser) return;
+                // Only fetch if photo is missing — avoids re-fetching on every render
+                if (currentUser.profile_photo_url) return;
+                authFetch(`${HRMS_API}/users/me`, { noRedirect: true })
+                    .then(r => r.ok ? r.json() : null)
+                    .then(data => {
+                        if (!data?.user?.profile_photo_url) return;
+                        setCurrentUser(u => {
+                            if (!u) return u;
+                            const merged = { ...u, profile_photo_url: data.user.profile_photo_url };
+                            try { sessionStorage.setItem('ms_current_user', JSON.stringify(merged)); } catch(_) {}
+                            return merged;
+                        });
+                    })
+                    .catch(() => {}); // non-critical — app works fine without photo
+            }, [currentUser?.id]); // re-run only when the logged-in user changes
+
+            // Listen for self-service profile edits (e.g. a new profile photo saved on the
+            // Settings page) so the sidebar avatar updates immediately without a full reload.
+            // Settings page dispatches this after a successful PATCH /users/me.
+            React.useEffect(() => {
+                const onProfilePatched = (e) => {
+                    setCurrentUser(u => {
+                        if (!u) return u;
+                        const merged = { ...u, ...(e.detail || {}) };
+                        try { sessionStorage.setItem('ms_current_user', JSON.stringify(merged)); } catch(err) {}
+                        return merged;
+                    });
+                };
+                window.addEventListener('yc:profile-updated', onProfilePatched);
+                return () => window.removeEventListener('yc:profile-updated', onProfilePatched);
+            }, []);
 
             // Persist dark mode preference & apply to document
             React.useEffect(() => {
@@ -9756,7 +11102,8 @@
                 return <LoginPage onSignIn={handleSignBackIn} />;
             }
 
-            const allowedPages = getAccessiblePages(currentUser);
+            // Memoize — only recalculates when user role/position changes
+            const allowedPages = React.useMemo(() => getAccessiblePages(currentUser), [currentUser]);
             const renderPage = () => {
                 // Block direct URL access to pages outside the user's role
                 if (!allowedPages.includes(currentPage)) return <Dashboard />;
@@ -9771,6 +11118,7 @@
                     case 'team-comparison': return <TeamComparisonPage />;
                     case 'staff-management': return <StaffManagementPage />;
                     case 'ticket-log': return <TicketLogPage />;
+                    case 'vehicle-management': return <VehicleManagementPage />;
                     case 'scheduled-reports': return <ScheduledReportsPage />;
                     case 'email-config':      return <EmailConfigPage />;
                     case 'ex-staff':          return <ExStaffPage />;
