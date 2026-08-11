@@ -2004,10 +2004,23 @@
 
                         {/* Stat cards */}
                         <div className='yc-stat-cards' style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(155px,1fr))',gap:'12px',marginBottom:'20px'}}>
-                            {statCards.map((c,i)=>(
+                            {statCards.map((c,i)=>{
+                                // Urgent/Critical card gets a red-tinted bg + border when count > 0
+                                const isUrgentActive = c.id==='urgent' && !loading && c.value>0;
+                                const cardStyle = {
+                                    ...card,
+                                    padding:'16px',
+                                    cursor:loading?'default':'pointer',
+                                    transition:'transform 0.12s,box-shadow 0.12s',
+                                    ...(isUrgentActive ? {
+                                        background: dm?'rgba(220,38,38,0.07)':'#FFF5F5',
+                                        border:`1px solid ${dm?'rgba(220,38,38,0.25)':'#FECACA'}`,
+                                    } : {}),
+                                };
+                                return (
                                 <div key={i} onClick={()=>!loading&&setInsight(buildInsight(c.id))}
-                                    style={{...card,padding:'16px',cursor:loading?'default':'pointer',transition:'transform 0.12s,box-shadow 0.12s'}}
-                                    onMouseEnter={e=>{if(!loading){e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow=dm?'0 8px 32px rgba(0,0,0,0.6),0 0 0 1px rgba(109,39,115,0.2)':'0 8px 24px rgba(109,39,115,0.12),0 0 0 1px rgba(109,39,115,0.1)'}}}
+                                    style={cardStyle}
+                                    onMouseEnter={e=>{if(!loading){e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow=dm?`0 8px 32px rgba(0,0,0,0.6),0 0 0 1px ${c.color}30`:`0 8px 24px ${c.color}20,0 0 0 1px ${c.color}18`}}}
                                     onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow=''}}>
                                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
                                         <div>
@@ -2016,11 +2029,14 @@
                                                 {loading ? '—' : c.value}
                                             </p>
                                         </div>
-                                        <span style={{background:c.bg,borderRadius:'8px',width:'36px',height:'36px',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name={c.icon} size={20} color={c.color} /></span>
+                                        <span style={{background:c.bg,borderRadius:'8px',width:'36px',height:'36px',display:'flex',alignItems:'center',justifyContent:'center',
+                                            ...(isUrgentActive?{animation:'ycSkeletonPulse 1.8s ease-in-out infinite'}:{})
+                                        }}><Icon name={c.icon} size={20} color={c.color} /></span>
                                     </div>
-                                    {!loading && <p style={{fontSize:'9px',color:dm?'rgba(109,39,115,0.5)':'rgba(109,39,115,0.4)',margin:'8px 0 0',fontWeight:'600',letterSpacing:'0.06em'}}>CLICK FOR INSIGHTS →</p>}
+                                    {!loading && <p style={{fontSize:'9px',color:dm?`${c.color}80`:`${c.color}99`,margin:'8px 0 0',fontWeight:'600',letterSpacing:'0.06em'}}>CLICK FOR INSIGHTS →</p>}
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
 
                         {/* Charts row */}
