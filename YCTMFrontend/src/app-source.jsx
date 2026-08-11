@@ -1984,7 +1984,7 @@
                 { id:'resolved',   label:'Resolved',       value:resolved,  color:'#10B981', bg:'#ECFDF5', icon:'check-circle' },
                 { id:'escalated',  label:'Escalated',      value:escalated, color:'#6D2773', bg:'#F5F3FF', icon:'arrow-up-circle' },
                 { id:'overdue',    label:'Overdue',        value:overdue,   color:'#EF4444', bg:'#FEF2F2', icon:'alert-triangle' },
-                { id:'urgent',     label:'Urgent/Critical',value:urgent,    color:'#DC2626', bg:'#FFF1F2', icon:'alert-circle' },
+                { id:'urgent',     label:'Urgent',value:urgent,    color:'#DC2626', bg:'#FFF1F2', icon:'alert-circle' },
             ];
 
             const card = {background:cardBg,borderRadius:'12px',border:`1px solid ${borderC}`,overflow:'hidden',
