@@ -2030,7 +2030,7 @@
                                             </p>
                                         </div>
                                         <span style={{background:c.bg,borderRadius:'8px',width:'36px',height:'36px',display:'flex',alignItems:'center',justifyContent:'center',
-                                            ...(isUrgentActive?{animation:'ycSkeletonPulse 1.8s ease-in-out infinite'}:{})
+                                            ...(isUrgentActive?{animation:'urgentIconPulse 1.4s ease-in-out infinite'}:{})
                                         }}><Icon name={c.icon} size={20} color={c.color} /></span>
                                     </div>
                                     {!loading && <p style={{fontSize:'9px',color:dm?`${c.color}80`:`${c.color}99`,margin:'8px 0 0',fontWeight:'600',letterSpacing:'0.06em'}}>CLICK FOR INSIGHTS →</p>}
