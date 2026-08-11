@@ -1987,7 +1987,7 @@
                 { id:'urgent',     label:'Urgent/Critical',value:urgent,    color:'#DC2626', bg:'#FFF1F2', icon:'alert-circle' },
             ];
 
-            const card = {background:cardBg,borderRadius:'12px',border:`1px solid ${borderC}`,
+            const card = {background:cardBg,borderRadius:'12px',border:`1px solid ${borderC}`,overflow:'hidden',
                 boxShadow: dm
                     ? '0 1px 0 rgba(255,255,255,0.04) inset, 0 4px 6px rgba(0,0,0,0.4), 0 16px 48px rgba(0,0,0,0.6), 0 0 80px -30px rgba(109,39,115,0.10)'
                     : '0 1px 2px rgba(15,23,42,0.04),0 4px 12px rgba(15,23,42,0.06),0  0 0 1px rgba(15,23,42,0.03)'};
@@ -2030,6 +2030,7 @@
                                             </p>
                                         </div>
                                         <span style={{background:c.bg,borderRadius:'8px',width:'36px',height:'36px',display:'flex',alignItems:'center',justifyContent:'center',
+                                            transformOrigin:'center',
                                             ...(isUrgentActive?{animation:'urgentIconPulse 1.4s ease-in-out infinite'}:{})
                                         }}><Icon name={c.icon} size={20} color={c.color} /></span>
                                     </div>
