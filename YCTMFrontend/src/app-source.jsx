@@ -9392,8 +9392,8 @@
                 setLoading(true);
                 try {
                     const [vR, sR] = await Promise.all([
-                        fetch(`${HRMS_API}/vehicles`, { credentials:'include', headers: authHeaders() }),
-                        fetch(`${HRMS_API}/users?limit=200&status=active`, { credentials:'include', headers: authHeaders() }),
+                        authFetch(`${HRMS_API}/vehicles`),
+                        authFetch(`${HRMS_API}/users?limit=200&status=active`),
                     ]);
                     const [vd, sd] = await Promise.all([vR.json(), sR.json()]);
                     if (!vR.ok) throw new Error(vd.message || vd.error || 'Failed to load vehicles');
