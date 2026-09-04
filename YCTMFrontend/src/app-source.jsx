@@ -2434,13 +2434,22 @@
                                                     <option>Schedule Change</option>
                                                     <option>Quality Issue</option>
                                                     <option>Safety Report</option>
-                                                    <option>Payment Issue</option>
+                                                    <option>Sales</option>
                                                     <option>Other</option>
                                                 </select>
                                             </div>
                                             <div>
                                                 <label className={labelCls}>Subtitle <span className="text-red-400">*</span></label>
-                                                <input type="text" name="subtitle" value={formData.subtitle} onChange={handleChange} placeholder="Brief description" className={inputCls}/>
+                                                <input type="text" name="subtitle" value={formData.subtitle} onChange={handleChange} placeholder="Brief description" className={inputCls} list="subtitle-suggestions"/>
+                                                <datalist id="subtitle-suggestions">
+                                                    <option value="Payment Issue"/>
+                                                    <option value="Service Delivery"/>
+                                                    <option value="Schedule Conflict"/>
+                                                    <option value="Equipment Fault"/>
+                                                    <option value="Staff Concern"/>
+                                                    <option value="Client Complaint"/>
+                                                    <option value="Documentation Error"/>
+                                                </datalist>
                                             </div>
                                             {formData.title_type === 'Other' && (
                                                 <div style={{gridColumn:'1/-1'}}>
