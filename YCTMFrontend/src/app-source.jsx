@@ -7048,7 +7048,8 @@
                     position_ids: (m.positions||[]).map(p=>p.id),
                     auth_provider: m.auth_provider||'azure_ad',
                     profile_photo_url: m.profile_photo_url||'',
-                    vehicle_access: m.vehicle_access===true,
+                    // Bootstrap admins and directors always have vehicle access by role
+                    vehicle_access: m.vehicle_access===true || m.is_bootstrap_admin===true || (m.positions||[]).some(p=>p.type==='director'),
                     system_role: m.role||''
                 });
                 setSelStaff(m); setModalMode('edit'); setError(''); setShowModal(true);
@@ -7474,14 +7475,15 @@
 
                                 {/* Vehicle Management access override */}
                                 <div style={{padding:'0 24px 16px'}}>
-                                    <label style={{display:'flex',alignItems:'center',gap:'10px',cursor:'pointer',border:`1.5px solid ${form.vehicle_access ? BRAND : borderC}`,borderRadius:'8px',padding:'10px 12px',background:form.vehicle_access ? `${BRAND}10` : 'transparent'}}>
-                                        <input type="checkbox" checked={form.vehicle_access} onChange={e=>setForm(f=>({...f,vehicle_access:e.target.checked}))}/>
+                                    {(()=>{ const vLocked = selStaff?.is_bootstrap_admin===true || (selStaff?.positions||[]).some(p=>p.type==='director'); return (
+                                    <label style={{display:'flex',alignItems:'center',gap:'10px',cursor:vLocked?'default':'pointer',border:`1.5px solid ${form.vehicle_access ? BRAND : borderC}`,borderRadius:'8px',padding:'10px 12px',background:form.vehicle_access ? `${BRAND}10` : 'transparent',opacity:vLocked?0.75:1}}>
+                                        <input type="checkbox" checked={form.vehicle_access} disabled={vLocked} onChange={e=>setForm(f=>({...f,vehicle_access:e.target.checked}))}/>
                                         <Icon name='truck' size={15} color={form.vehicle_access ? BRAND : textM} />
                                         <div>
                                             <div style={{fontSize:'12.5px',fontWeight:'600',color:textP}}>Vehicle Management Access</div>
-                                            <div style={{fontSize:'11px',color:textM}}>Grant access to Vehicle Management regardless of role</div>
+                                            <div style={{fontSize:'11px',color:textM}}>{vLocked ? 'Always granted — Bootstrap Admin / Director role' : 'Grant access to Vehicle Management regardless of role'}</div>
                                         </div>
-                                    </label>
+                                    </label>); })()}
                                 </div>
 
                                 {/* Common User toggle — bootstrap admin + director only */}
