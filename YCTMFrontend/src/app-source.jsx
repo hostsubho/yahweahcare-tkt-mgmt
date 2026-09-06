@@ -7473,21 +7473,6 @@
                                     </div>
                                 </div>
 
-                                {/* System Role — admin/director can override the role derived from position */}
-                                {(sessionUser?.isBootstrapAdmin || sessionUser?.positionType==='director' || ['super_admin','admin'].includes(sessionUser?.role||'')) && (
-                                <div style={{padding:'0 24px 16px'}}>
-                                    <div style={{fontSize:'11px',fontWeight:'700',color:dm?'#5a78a8':'#64748B',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'6px'}}>System Role Assignment</div>
-                                    <select value={form.system_role} onChange={e=>setForm(f=>({...f,system_role:e.target.value}))}
-                                        style={{width:'100%',padding:'9px 12px',borderRadius:'8px',border:`1.5px solid ${borderC}`,background:dm?'rgba(17,30,58,0.55)':'#fff',color:dm?'#e8effc':'#1e293b',fontSize:'13px',outline:'none'}}>
-                                        {ASSIGNABLE_ROLES.map(r=><option key={r.value} value={r.value}>{r.label}</option>)}
-                                    </select>
-                                    <p style={{fontSize:'11px',color:dm?'#4a607f':'#94A3B8',marginTop:'5px'}}>
-                                        Setting <strong>Common User</strong> limits access to Dashboard, Create Ticket, and own tickets only.
-                                        Leave blank to derive access from position.
-                                    </p>
-                                </div>
-                                )}
-
                                 {/* Vehicle Management access override */}
                                 <div style={{padding:'0 24px 16px'}}>
                                     <label style={{display:'flex',alignItems:'center',gap:'10px',cursor:'pointer',border:`1.5px solid ${form.vehicle_access ? BRAND : borderC}`,borderRadius:'8px',padding:'10px 12px',background:form.vehicle_access ? `${BRAND}10` : 'transparent'}}>
@@ -7499,6 +7484,20 @@
                                         </div>
                                     </label>
                                 </div>
+
+                                {/* Common User toggle — bootstrap admin + director only */}
+                                {(sessionUser?.isBootstrapAdmin || sessionUser?.positionType==='director') && (
+                                <div style={{padding:'0 24px 16px'}}>
+                                    <label style={{display:'flex',alignItems:'center',gap:'10px',cursor:'pointer',border:`1.5px solid ${form.system_role==='common_user' ? '#7C3AED' : borderC}`,borderRadius:'8px',padding:'10px 12px',background:form.system_role==='common_user' ? 'rgba(124,58,237,0.07)' : 'transparent'}}>
+                                        <input type="checkbox" checked={form.system_role==='common_user'} onChange={e=>setForm(f=>({...f,system_role:e.target.checked?'common_user':''}))}/>
+                                        <Icon name='user' size={15} color={form.system_role==='common_user' ? '#7C3AED' : textM} />
+                                        <div>
+                                            <div style={{fontSize:'12.5px',fontWeight:'600',color:textP}}>Common User Access</div>
+                                            <div style={{fontSize:'11px',color:textM}}>Restricts this account to Dashboard, Create Ticket, and their own tickets only</div>
+                                        </div>
+                                    </label>
+                                </div>
+                                )}
 
                                 {/* Modal footer */}
                                 <div style={{padding:'16px 24px',borderTop:`1px solid ${borderC}`,display:'flex',justifyContent:'flex-end',gap:'10px',background:dm?'#0F172A':'#F8FAFC',borderRadius:'0 0 16px 16px'}}>
