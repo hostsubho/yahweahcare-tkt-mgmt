@@ -7088,7 +7088,7 @@
                     if (!res.ok) {
                         const e = await res.json().catch(()=>({}));
                         if (res.status === 401) throw new Error('Session expired — please sign out and sign back in.');
-                        throw new Error(e.error || e.message || 'Save failed');
+                        throw new Error(e.message || e.error || 'Save failed');
                     }
                     setShowModal(false);
                     showToast(modalMode==='add' ? 'Staff member added' : 'Staff member updated');
@@ -7377,7 +7377,6 @@
                                 </div>
 
                                 <div style={{padding:'20px 24px'}}>
-                                    {error && <div style={{background:dm?'rgba(239,68,68,0.12)':'#FEF2F2',border:`1px solid ${dm?'rgba(239,68,68,0.3)':'#FECACA'}`,borderRadius:'8px',padding:'8px 12px',marginBottom:'14px',fontSize:'12px',color:'#DC2626',display:'flex',alignItems:'center',gap:'6px'}}><Icon name='alert-triangle' size={12} color='#DC2626' />{error}</div>}
 
                                     {/* Profile photo */}
                                     <div style={{display:'flex',justifyContent:'center',marginBottom:'18px'}}>
@@ -7500,11 +7499,14 @@
                                 )}
 
                                 {/* Modal footer */}
-                                <div style={{padding:'16px 24px',borderTop:`1px solid ${borderC}`,display:'flex',justifyContent:'flex-end',gap:'10px',background:dm?'#0F172A':'#F8FAFC',borderRadius:'0 0 16px 16px'}}>
-                                    <button onClick={()=>setShowModal(false)} style={{padding:'9px 18px',background:cardBg,border:`1px solid ${borderC}`,borderRadius:'8px',fontSize:'13px',fontWeight:'600',color:textM,cursor:'pointer'}}>Cancel</button>
-                                    <button onClick={handleSave} disabled={saving} style={{padding:'9px 20px',background:BRAND,color:'white',border:'none',borderRadius:'8px',fontSize:'13px',fontWeight:'700',cursor:'pointer',opacity:saving?0.7:1}}>
-                                        {saving ? 'Saving…' : (modalMode==='add'?'Add Staff Member':'Save Changes')}
-                                    </button>
+                                <div style={{padding:'16px 24px',borderTop:`1px solid ${borderC}`,background:dm?'#0F172A':'#F8FAFC',borderRadius:'0 0 16px 16px'}}>
+                                    {error && <div style={{background:dm?'rgba(239,68,68,0.12)':'#FEF2F2',border:`1px solid ${dm?'rgba(239,68,68,0.3)':'#FECACA'}`,borderRadius:'8px',padding:'8px 12px',marginBottom:'12px',fontSize:'12px',color:'#DC2626',display:'flex',alignItems:'center',gap:'6px'}}><Icon name='alert-triangle' size={12} color='#DC2626' />{error}</div>}
+                                    <div style={{display:'flex',justifyContent:'flex-end',gap:'10px'}}>
+                                        <button onClick={()=>setShowModal(false)} style={{padding:'9px 18px',background:cardBg,border:`1px solid ${borderC}`,borderRadius:'8px',fontSize:'13px',fontWeight:'600',color:textM,cursor:'pointer'}}>Cancel</button>
+                                        <button onClick={handleSave} disabled={saving} style={{padding:'9px 20px',background:BRAND,color:'white',border:'none',borderRadius:'8px',fontSize:'13px',fontWeight:'700',cursor:'pointer',opacity:saving?0.7:1}}>
+                                            {saving ? 'Saving…' : (modalMode==='add'?'Add Staff Member':'Save Changes')}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
