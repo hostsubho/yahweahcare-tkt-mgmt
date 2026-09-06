@@ -473,7 +473,7 @@
         //   Dept Manager           → + org-chart, staff-performance, team-comparison
         //   HR Manager             → + staff-management  (also gets manager pages)
         //   Director / Bootstrap   → all pages
-        const COMMON_USER_PAGES = ['dashboard','create-ticket','tickets'];
+        const COMMON_USER_PAGES = ['dashboard','create-ticket','tickets','org-chart'];
         const STAFF_PAGES    = ['dashboard','create-ticket','tickets','calendar','analytics','settings'];
         const MANAGER_PAGES  = [...STAFF_PAGES, 'org-chart','staff-performance','team-comparison','ticket-log','vehicle-management'];
         const HR_PAGES       = [...MANAGER_PAGES, 'staff-management'];
