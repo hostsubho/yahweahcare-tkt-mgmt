@@ -473,6 +473,7 @@
         //   Dept Manager           → + org-chart, staff-performance, team-comparison
         //   HR Manager             → + staff-management  (also gets manager pages)
         //   Director / Bootstrap   → all pages
+        const COMMON_USER_PAGES = ['dashboard','create-ticket','tickets'];
         const STAFF_PAGES    = ['dashboard','create-ticket','tickets','calendar','analytics','settings'];
         const MANAGER_PAGES  = [...STAFF_PAGES, 'org-chart','staff-performance','team-comparison','ticket-log','vehicle-management'];
         const HR_PAGES       = [...MANAGER_PAGES, 'staff-management'];
@@ -496,6 +497,8 @@
             // Department Manager: ops/finance/strategic position, or manager role
             if (['ops','finance','strategic'].includes(positionType)
                 || role === 'manager')                           return withVehicleOverride(MANAGER_PAGES);
+            // Common User: restricted access — dashboard + create ticket + own tickets only
+            if (role === 'common_user') return COMMON_USER_PAGES;
             return withVehicleOverride(STAFF_PAGES);
         }
 
@@ -6951,8 +6954,16 @@
                 name:'', email:'', phone:'', address:'', employment_type:'full_time',
                 department_id:'', manager_id:'', start_date:'',
                 profile_notes:'', position_ids:[], auth_provider:'azure_ad',
-                profile_photo_url:'', vehicle_access:false
+                profile_photo_url:'', vehicle_access:false, system_role:''
             };
+            const ASSIGNABLE_ROLES = [
+                { value:'',            label:'— Derive from position —' },
+                { value:'common_user', label:'Common User (restricted access)' },
+                { value:'employee',    label:'Employee (standard access)' },
+                { value:'manager',     label:'Manager' },
+                { value:'hr',          label:'HR Manager' },
+                { value:'admin',       label:'Admin / Director' },
+            ];
 
 
             const dm = useDark();
@@ -7037,7 +7048,8 @@
                     position_ids: (m.positions||[]).map(p=>p.id),
                     auth_provider: m.auth_provider||'azure_ad',
                     profile_photo_url: m.profile_photo_url||'',
-                    vehicle_access: m.vehicle_access===true
+                    vehicle_access: m.vehicle_access===true,
+                    system_role: m.role||''
                 });
                 setSelStaff(m); setModalMode('edit'); setError(''); setShowModal(true);
             };
@@ -7068,6 +7080,7 @@
                         is_active:       true,
                         profile_photo_url: form.profile_photo_url || null,
                         vehicle_access:  form.vehicle_access === true,
+                        ...(form.system_role ? { role: form.system_role } : {}),
                     };
                     const url    = modalMode==='add' ? `${HRMS_API}/users` : `${HRMS_API}/users/${selStaff.id}`;
                     const method = modalMode==='add' ? 'POST' : 'PATCH';
@@ -7459,6 +7472,21 @@
                                         </div>
                                     </div>
                                 </div>
+
+                                {/* System Role — admin/director can override the role derived from position */}
+                                {(sessionUser?.isBootstrapAdmin || sessionUser?.positionType==='director' || ['super_admin','admin'].includes(sessionUser?.role||'')) && (
+                                <div style={{padding:'0 24px 16px'}}>
+                                    <div style={{fontSize:'11px',fontWeight:'700',color:dm?'#5a78a8':'#64748B',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'6px'}}>System Role Assignment</div>
+                                    <select value={form.system_role} onChange={e=>setForm(f=>({...f,system_role:e.target.value}))}
+                                        style={{width:'100%',padding:'9px 12px',borderRadius:'8px',border:`1.5px solid ${borderC}`,background:dm?'rgba(17,30,58,0.55)':'#fff',color:dm?'#e8effc':'#1e293b',fontSize:'13px',outline:'none'}}>
+                                        {ASSIGNABLE_ROLES.map(r=><option key={r.value} value={r.value}>{r.label}</option>)}
+                                    </select>
+                                    <p style={{fontSize:'11px',color:dm?'#4a607f':'#94A3B8',marginTop:'5px'}}>
+                                        Setting <strong>Common User</strong> limits access to Dashboard, Create Ticket, and own tickets only.
+                                        Leave blank to derive access from position.
+                                    </p>
+                                </div>
+                                )}
 
                                 {/* Vehicle Management access override */}
                                 <div style={{padding:'0 24px 16px'}}>
@@ -10683,7 +10711,7 @@
                                             <label style={labelStyle}>User Role</label>
                                             <select value={filterDraft.role} onChange={e=>setFilterDraft(f=>({...f,role:e.target.value}))} style={inputStyle}>
                                                 <option value="">Any role</option>
-                                                {['super_admin','admin','hr','manager','employee','staff'].map(r=><option key={r} value={r}>{r}</option>)}
+                                                {['super_admin','admin','hr','manager','employee','staff','common_user'].map(r=><option key={r} value={r}>{r.replace('_',' ')}</option>)}
                                             </select>
                                         </div>
                                         <div><label style={labelStyle}>Module / Activity Type</label><input value={filterDraft.module} onChange={e=>setFilterDraft(f=>({...f,module:e.target.value}))} placeholder="e.g. auth, tickets, users" style={inputStyle}/></div>
